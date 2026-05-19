@@ -75,6 +75,7 @@ Before running the system you need to choose your LLM API provider and export th
 | `ASIOne` | `ASIONE_API_KEY` |  ASI1 Ultra model via ASI:One inference endpoint (`https://api.asi1.ai/v1`). |
 | `Ollama-local` | `OLLAMA_API_KEY` |  Ollama model via local inference endpoint. API endpoint is set via `LLM_SERVER_LOCAL_URL` environment variables. |
 | `OpenRouter` | `OPENROUTER_API_KEY` |  GLM model via OpenRouter inference endpoint. |
+| `Bedrock` | standard AWS credentials |  AWS Bedrock models via boto3. Set `AWS_REGION` / `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Override the model with `AWS_BEDROCK_MODEL_ID` or `BEDROCK_MODEL_ID`.
 
 Run the system via the following command which ensures the system is started from the root folder of PeTTa:
 ```
