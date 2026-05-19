@@ -91,10 +91,11 @@ Before running the system you need to choose your LLM API provider and export th
 | `Ollama-local` | `OLLAMA_API_KEY` |  Ollama model via local inference endpoint. API endpoint is set via `LLM_SERVER_LOCAL_URL` environment variables. |
 | `OpenRouter` | `OPENROUTER_API_KEY` |  GLM model via OpenRouter inference endpoint. |
 | `MiniMaxM3` | `OPENROUTER_API_KEY` |  MiniMax M3 model via OpenRouter inference endpoint. |
+| `Bedrock` | standard AWS credentials |  AWS Bedrock models via boto3. Set `AWS_REGION` / `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Override the model with `AWS_BEDROCK_MODEL_ID` or `BEDROCK_MODEL_ID`.
 
 Run the system via the following command which ensures the system is started from the root folder of PeTTa:
 ```
-OMEGACLAW_AUTH_SECRET=<channel-secret> sh run.sh run.metta IRC_channel="<irc-channel>"
+OMEGACLAW_AUTH_SECRET=<channel-secret> sh run.sh run.metta provider=Bedrock IRC_channel="<irc-channel>"
 ```
 After start go to https://webchat.quakenet.org/ to communicate with the agent. Join `<irc-channel>` and after agent is joined send `auth <channel-secret>` message to authenticate yourself as an agent owner. Please replace `<irc-channel>` and `<channel-secret>` by your own values.
 
