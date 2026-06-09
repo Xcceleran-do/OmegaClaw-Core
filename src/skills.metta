@@ -53,6 +53,11 @@
 (= (tavily-search $query)
    (py-call (agentverse.tavily_search $query)))
 
+   
+(= (send-ui $msg)
+   (send $msg))
+
+
 (= (technical-analysis $ticker)
    (py-call (agentverse.technical_analysis $ticker)))
 
