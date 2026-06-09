@@ -265,3 +265,33 @@ def extract_entities(raw_sources):
 
     return entities
 
+
+
+def _selected_editorial_provider() -> str:
+    return (
+        os.environ.get("EDITORIAL_PROVIDER")
+        or os.environ.get("OMEGACLAW_PROVIDER")
+    )
+
+
+def _selected_editorial_max_tokens() -> int:
+    raw_value = (
+        os.environ.get("EDITORIAL_MAX_TOKENS")
+    )
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return DEFAULT_EDITORIAL_MAX_TOKENS
+
+
+def _call_selected_provider(prompt: str) -> str:
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+    import lib_llm_ext
+
+    provider = _selected_editorial_provider()
+    max_tokens = _selected_editorial_max_tokens()
+    return lib_llm_ext.callProvider(provider, prompt, max_tokens)
+
+
