@@ -358,3 +358,263 @@ def rank_stories(candidates):
 
 
 
+
+
+
+def _fallback_article(story, sources, context):
+    publication = context.get("publication", "AI Futures")
+    theme = story["theme"]
+    score = story["score"]
+    source_titles = [
+        source.get("title", "Untitled source")
+        for source in sources
+        if source.get("topic") == theme
+    ][:3]
+    if not source_titles:
+        source_titles = [
+            source.get("title", "Untitled source")
+            for source in sources
+        ][:3]
+
+    evidence = "; ".join(source_titles) or "the collected editorial source summaries"
+
+    return f"""
+Theme:
+{theme}
+
+Score:
+{score}
+
+Article Draft:
+
+{publication} is tracking {theme} as today's strongest editorial candidate, with a signal score of {score}. According to the collected source summaries, especially {evidence}, the topic is showing enough activity to merit a focused draft rather than a generic trend note.
+
+The central story is that {theme} is moving from abstract promise into practical systems, tools, and public debate. The available source material points to recurring questions about capability, reliability, and how quickly organizations can turn research ideas into usable infrastructure. That makes the topic useful for readers who want to understand not only what changed, but why it matters.
+
+The strongest angle is the tension between momentum and evidence. There is clear interest around {theme}, but the article should avoid overclaiming until stronger primary sources are added. A publishable version should bring in concrete examples, named projects, dates, and links to original reports or papers.
+
+For now, the draft conclusion is cautious: {theme} remains a live and important beat, but it needs better sourcing before publication. The next editorial step is to replace the placeholder summaries with real references and sharpen the argument around one specific development.
+"""
+
+
+def draft_article(story, sources=None, context=None, entities=None):
+    sources = sources or []
+    context = context or {}
+    entities = entities or {}
+
+    prompt = f"""You are the editorial drafting module for {context.get("publication", "AI Futures")}.
+
+Write a publication-ready article from the selected story and source summaries.
+
+Requirements:
+- Use the exact section labels: Theme:, Score:, Article Draft:
+- Write 500-800 words.
+- Make the article specific, analytical, and readable.
+- Use only the provided source summaries.
+- Do not invent URLs, quotes, dates, or facts.
+- Mention evidence with phrases such as "According to the source summaries" when exact citations are unavailable.
+- Avoid placeholder language like "continues an ongoing trend".
+
+Selected story:
+{json.dumps(story, indent=2)}
+
+Editorial context:
+{json.dumps(context, indent=2)}
+
+Detected entities:
+{json.dumps(entities, indent=2)}
+
+Source summaries:
+{json.dumps(sources, indent=2)}
+"""
+
+    try:
+        article = _call_selected_provider(prompt)
+    except Exception as e:
+        print(f"LLM draft generation failed: {e}")
+        return _fallback_article(story, sources, context)
+
+    article = str(article).strip()
+    if not article:
+        return _fallback_article(story, sources, context)
+
+    return article
+
+def critique_article(article):
+    article_text = str(article).strip()
+    issues = []
+    recommendations = []
+
+    words = re.findall(r"\b[\w'-]+\b", article_text)
+    word_count = len(words)
+
+    if word_count < 120:
+        issues.append({
+            "severity": "major",
+            "message": "Draft is too short for publication.",
+        })
+        recommendations.append("Expand the draft with a clear lead, context, evidence, and implications.")
+
+    required_sections = [
+        "Theme:",
+        "Score:",
+        "Article Draft:",
+    ]
+    missing_sections = [
+        section for section in required_sections
+        if section.lower() not in article_text.lower()
+    ]
+    if missing_sections:
+        issues.append({
+            "severity": "major",
+            "message": f"Draft is missing required sections: {', '.join(missing_sections)}",
+        })
+        recommendations.append("Keep the generated article structured with theme, score, and article body sections.")
+
+    source_signals = [
+        "http://",
+        "https://",
+        "source:",
+        "according to",
+        "reported",
+        "study",
+        "paper",
+    ]
+    if not any(signal in article_text.lower() for signal in source_signals):
+        issues.append({
+            "severity": "major",
+            "message": "Draft does not cite or mention supporting sources.",
+        })
+        recommendations.append("Add source-backed evidence before publication.")
+
+    if "example.com" in article_text.lower():
+        issues.append({
+            "severity": "critical",
+            "message": "Draft contains placeholder source material.",
+        })
+        recommendations.append("Replace placeholder sources with real source references.")
+
+    if "continues an ongoing trend" in article_text.lower():
+        issues.append({
+            "severity": "minor",
+            "message": "Draft uses generic placeholder language.",
+        })
+        recommendations.append("Replace generic phrasing with specific developments and concrete stakes.")
+
+    approved = not any(
+        issue["severity"] in {"critical", "major"}
+        for issue in issues
+    )
+
+    critique = {
+        "approved": approved,
+        "word_count": word_count,
+        "issues": issues,
+        "recommendations": recommendations,
+    }
+
+    if approved:
+        return None
+
+    return {
+        "publication": {
+            "success": False,
+            "status": "needs-revision",
+            "content": article_text,
+        },
+        "critique": critique,
+        "followups": recommendations,
+    }
+
+def publish_article(article):
+    return {
+        "success": True,
+        "status": "draft-only",
+        "content": article,
+    }
+
+
+def create_followups(story):
+    return []
+
+
+def update_memory(story):
+    return []
+
+def editorial_agent():
+    
+  
+    context = load_editorial_context()
+    
+  
+    raw_sources = fetch_sources(
+        context
+    )
+
+    entities = extract_entities(
+        raw_sources
+    )
+
+    reasoning_mode = context.get("reasoning_mode", "python")
+    
+    if reasoning_mode == "atomspace":
+        selected_story, reasoning_trace = atomspace_select_story(
+            raw_sources,
+            context,
+        )
+    else:
+        themes = extract_themes(
+            raw_sources
+        )
+        print("EDITORIAL CYCLE Got here2" ,context["beats"])
+        candidates = cross_reference(
+            themes
+        )
+
+        ranked = rank_stories(
+            candidates
+        )
+
+        selected_story = ranked[0]
+        reasoning_trace = {
+            "themes": themes,
+            "candidates": candidates,
+            "ranked": ranked,
+        }
+
+    article = draft_article(
+        selected_story,
+        sources=raw_sources,
+        context=context,
+        entities=entities,
+    )
+
+    critique = critique_article(
+        article
+    )
+
+    if critique:
+        
+        return critique
+
+    publication = publish_article(
+        article
+    )
+
+    update_memory(
+        selected_story
+    )
+
+    followups = create_followups(
+        selected_story
+    )
+
+    return {
+        "publication": publication,
+        "selected_story": selected_story,
+        "reasoning_mode": reasoning_mode,
+        "reasoning_trace": reasoning_trace,
+    }
+
+
+
