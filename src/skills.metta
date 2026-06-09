@@ -9,6 +9,8 @@
     "- Read file to string: read-file filename"
     "- Write string to file: write-file filename string"
     "- Append line to file: append-file filename string",
+    ;MINDPLEX:
+    "- If asked to Generate article , draft it strictly using the editorial agent, without waiting user input for topic: write-article"
     ;COMMUNICATION CHANNELS:
     "- Send message to user: send string"
     "- Search the web: search string"
@@ -53,6 +55,12 @@
 
 (= (technical-analysis $ticker)
    (py-call (agentverse.technical_analysis $ticker)))
+
+(= (write-article)
+   (let $result
+        (py-call (agentverse.editorial_agent))
+        (progn (send-ui (repr $result))
+               $result)))
 
 !(import_prolog_functions_from_file (library OmegaClaw-Core ./src/skills.pl) (shell first_char gc read_file_tail))
 
