@@ -189,3 +189,79 @@ def fetch_sources(context):
 
     return collected
 
+
+def extract_themes(raw_sources):
+    theme_dictionary = {
+
+        "AI Agents": [
+            "agent",
+            "agents",
+            "autonomous"
+        ],
+
+        "Open Source AI": [
+            "open source",
+            "github"
+        ],
+
+        "AGI": [
+            "agi",
+            "general intelligence"
+        ], 
+         "Biology": [
+            "biology",
+            "living organisms"
+        ]
+    }
+
+    scores = {}
+
+    for source in raw_sources:
+
+        text = source["content"].lower()
+
+        for theme, keywords in theme_dictionary.items():
+
+            count = 0
+
+            for keyword in keywords:
+
+                count += text.count(keyword)
+
+            scores[theme] = (
+                scores.get(theme, 0) + count
+            )
+
+
+    return scores
+
+
+def extract_entities(raw_sources):
+    entities = {}
+
+    known_entities = [
+        "AGI",
+        "ASI",
+        "OpenAI",
+        "Anthropic",
+        "Claude",
+        "GitHub",
+        "Google"
+    ]
+
+
+    for source in raw_sources:
+
+        text = source["content"]
+
+        for entity in known_entities:
+
+            if entity.lower() in text.lower():
+
+                entities[entity] = (
+                    entities.get(entity, 0) + 1
+                )
+
+
+    return entities
+
