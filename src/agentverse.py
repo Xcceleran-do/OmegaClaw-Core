@@ -124,3 +124,68 @@ def load_editorial_context():
 
     return topic
 
+
+def search_mindplex(beat: str):
+    sources_by_topic = {
+        "AI": [
+            {
+                "title": "What is AI?",
+                "url": "https://example.com/ai",
+                "content": "AI stands for Artificial Intelligence, which refers to the simulation of human intelligence in machines that are programmed to think and learn like humans.",
+            },
+            {
+                "title": "Applications of AI",
+                "url": "https://example.com/ai-applications",
+                "content": "AI is used in various applications such as natural language processing, computer vision, autonomous vehicles, and recommendation systems.",
+            },
+        ],
+        "AGI": [
+            {
+                "title": "What is AGI?",
+                "url": "https://example.com/agi",
+                "content": "AGI stands for Artificial General Intelligence, which refers to a type of artificial intelligence that can understand, learn, and apply knowledge across a wide range of tasks at a level comparable to human intelligence.",
+            }
+        ],
+        "BGI": [
+            {
+                "title": "What is BGI?",
+                "url": "https://example.com/bgi",
+                "content": "BGI stands for Beneficial General Intelligence, which refers to the development of artificial general intelligence that is designed and aligned to be beneficial to humanity, ensuring that its actions and decisions promote human well-being and safety.",
+            }
+        ],
+
+         "Biology": [
+            {
+                "title": "What is Biology?",
+                "url": "https://example.com/biology",
+                "content": "Biology is the scientific study of living organisms, including their structure, function, growth, evolution, and distribution.",
+            }
+        ],
+    }
+
+    topic_aliases = {
+        "AI Agents": "AI",
+        "Open Source AI": "AI",
+        "AGI": "AGI",
+        "BGI": "BGI",
+    }
+    return sources_by_topic.get(topic_aliases.get(beat, beat), [])
+
+
+def fetch_sources(context):
+    collected = []
+
+
+    for beat in context["beats"]:
+
+        results = search_mindplex(beat)
+
+        for result in results:
+            collected.append({
+                "topic": beat,
+                **result,
+            })
+    
+
+    return collected
+
