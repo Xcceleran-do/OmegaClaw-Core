@@ -110,3 +110,17 @@ def tavily_search(search_query: str, timeout: int = 60) -> str:
     except Exception as e:
         return f"error: {e}"
 
+
+
+def load_editorial_context():
+    with open(PROJECT_ROOT / "memory" / "topic_config.json") as f:
+        topic = json.load(f)
+
+    # with open("configs/methodology_config.json") as f:
+    #     methodology = json.load(f)
+
+    # with open("configs/engagement_config.json") as f:
+    #     engagement = json.load(f)
+
+    return topic
+
