@@ -1,10 +1,22 @@
 import asyncio
 import json
 import os
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from uagents import Model
-from uagents.query import send_sync_message
+try:
+    from uagents import Model
+    from uagents.query import send_sync_message
+except ModuleNotFoundError:
+    class Model:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    send_sync_message = None
 
 TECHNICAL_ANALYSIS_AGENT_ADDRESS = os.environ.get(
     "TECHNICAL_ANALYSIS_AGENT_ADDRESS",
@@ -14,6 +26,9 @@ TAVILY_SEARCH_AGENT_ADDRESS = os.environ.get(
     "TAVILY_SEARCH_AGENT_ADDRESS",
     "agent1qt5uffgp0l3h9mqed8zh8vy5vs374jl2f8y0mjjvqm44axqseejqzmzx9v8",
 )
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_EDITORIAL_PROVIDER = "Bedrock"
+DEFAULT_EDITORIAL_MAX_TOKENS = 1800
 
 
 class WebSearchRequest(Model):
@@ -94,3 +109,4 @@ def tavily_search(search_query: str, timeout: int = 60) -> str:
         return _format_tavily_results(response)
     except Exception as e:
         return f"error: {e}"
+
