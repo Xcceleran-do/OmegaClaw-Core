@@ -295,3 +295,66 @@ def _call_selected_provider(prompt: str) -> str:
     return lib_llm_ext.callProvider(provider, prompt, max_tokens)
 
 
+
+
+def cross_reference(themes):
+
+
+    with open(PROJECT_ROOT / "memory" / "editorial_memory.json") as f:
+        memory = json.load(f)
+
+    candidates = []
+
+
+    for theme, score in themes.items():
+
+        previous_mentions = (
+            memory["themes"]
+            .get(theme, {})
+            .get("mentions", 0)
+        )
+
+        candidates.append({
+            "theme": theme,
+            "signal_strength": score,
+            "historical_mentions":
+                previous_mentions
+        })
+
+
+    return candidates
+
+
+def rank_stories(candidates):
+    ranked = []
+
+    for candidate in candidates:
+
+        signal = (
+            candidate["signal_strength"]
+        )
+
+        continuity = (
+            candidate["historical_mentions"]
+        )
+
+        score = (
+            signal * 0.7
+            +
+            continuity * 0.3
+        )
+
+        candidate["score"] = score
+
+        ranked.append(candidate)
+
+
+    ranked.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
+    return ranked
+
+
+
+
