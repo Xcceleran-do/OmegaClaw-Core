@@ -566,7 +566,6 @@ def editorial_agent():
         themes = extract_themes(
             raw_sources
         )
-        print("EDITORIAL CYCLE Got here2" ,context["beats"])
         candidates = cross_reference(
             themes
         )
