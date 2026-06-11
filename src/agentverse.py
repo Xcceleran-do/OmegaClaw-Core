@@ -271,12 +271,14 @@ def _selected_editorial_provider() -> str:
     return (
         os.environ.get("EDITORIAL_PROVIDER")
         or os.environ.get("OMEGACLAW_PROVIDER")
+        or _read_metta_config_value("provider", DEFAULT_EDITORIAL_PROVIDER)
     )
 
 
 def _selected_editorial_max_tokens() -> int:
     raw_value = (
         os.environ.get("EDITORIAL_MAX_TOKENS")
+        or _read_metta_config_value("maxOutputToken", str(DEFAULT_EDITORIAL_MAX_TOKENS))
     )
     try:
         return int(raw_value)
@@ -800,3 +802,16 @@ def atomspace_select_story(raw_sources, context):
         "candidates": candidates,
         "ranked": ranked,
     }
+
+
+def _read_metta_config_value(name: str, default: str) -> str:
+    loop_path = PROJECT_ROOT / "src" / "loop.metta"
+    try:
+        text = loop_path.read_text()
+    except OSError:
+        return default
+
+    match = re.search(rf"\(configure\s+{re.escape(name)}\s+([^\s\)]+)\)", text)
+    if not match:
+        return default
+    return match.group(1)
