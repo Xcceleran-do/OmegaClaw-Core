@@ -541,7 +541,18 @@ def create_followups(story):
 
 
 def update_memory(story):
-    return []
+    theme = story.get("theme")
+    if not theme:
+        return "MEMORY_UPDATE_SKIPPED"
+
+    mentions = _read_theme_mentions_from_metta()
+    next_count = mentions.get(theme, 0) + 1
+    timestamp = datetime.now(timezone.utc).isoformat()
+    _append_atomspace_facts([
+        _metta_atom("ThemeMention", theme, next_count),
+        _metta_atom("ThemeLastSelected", theme, timestamp),
+    ])
+    return "MEMORY_UPDATE_SUCCESS"
 
 def editorial_agent():
     
