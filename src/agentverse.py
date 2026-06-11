@@ -765,3 +765,38 @@ def atomspace_extract_themes(raw_sources, context):
         for theme, score in scores.items()
         if theme in context.get("beats", scores.keys())
     }
+
+
+
+def atomspace_cross_reference(themes):
+    mentions = _read_theme_mentions_from_metta()
+    json_mentions = _read_theme_mentions_from_json()
+    candidates = []
+
+    for theme, score in themes.items():
+        historical_mentions = max(
+            mentions.get(theme, 0),
+            json_mentions.get(theme, 0),
+        )
+        candidates.append({
+            "theme": theme,
+            "signal_strength": score,
+            "historical_mentions": historical_mentions,
+            "memory_backend": "atomspace",
+        })
+
+    return candidates
+
+
+def atomspace_select_story(raw_sources, context):
+    assert_sources_to_atomspace(raw_sources, context)
+    themes = atomspace_extract_themes(raw_sources, context)
+    candidates = atomspace_cross_reference(themes)
+    ranked = rank_stories(candidates)
+    if not ranked:
+        raise ValueError("AtomSpace story selection found no candidates")
+    return ranked[0], {
+        "themes": themes,
+        "candidates": candidates,
+        "ranked": ranked,
+    }
