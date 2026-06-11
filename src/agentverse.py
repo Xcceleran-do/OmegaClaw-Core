@@ -617,3 +617,17 @@ def editorial_agent():
 
 
 
+
+def _metta_string(value: Any) -> str:
+    text = str(value)
+    text = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return f'"{text}"'
+
+
+def _metta_atom(name: str, *args: Any) -> str:
+    return f"({name} {' '.join(_metta_string(arg) for arg in args)})"
+
+
+def _source_id(index: int, source: dict) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", source.get("topic", "source").lower()).strip("-")
+    return f"{slug or 'source'}-{index + 1}"
