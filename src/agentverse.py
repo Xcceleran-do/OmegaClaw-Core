@@ -706,3 +706,46 @@ def _read_theme_keywords_from_metta(context=None):
         if clean_keyword not in keywords[clean_theme]:
             keywords[clean_theme].append(clean_keyword)
     return keywords
+
+
+
+def _append_atomspace_facts(facts: list[str]):
+    if not facts:
+        return
+
+    existing = set()
+    if EDITORIAL_ATOMSPACE_MEMORY.exists():
+        existing = {
+            line.strip()
+            for line in EDITORIAL_ATOMSPACE_MEMORY.read_text().splitlines()
+            if line.strip() and not line.strip().startswith(";")
+        }
+
+    new_facts = [fact for fact in facts if fact not in existing]
+    if not new_facts:
+        return
+
+    with open(EDITORIAL_ATOMSPACE_MEMORY, "a") as f:
+        f.write("\n")
+        for fact in new_facts:
+            f.write(f"{fact}\n")
+
+
+def assert_sources_to_atomspace(raw_sources, context):
+    theme_keywords = _read_theme_keywords_from_metta(context)
+    facts = []
+
+    for index, source in enumerate(raw_sources):
+        source_id = _source_id(index, source)
+        facts.extend([
+            _metta_atom("Source", source_id),
+            _metta_atom("SourceTopic", source_id, source.get("topic", "")),
+            _metta_atom("SourceTitle", source_id, source.get("title", "")),
+            _metta_atom("SourceContent", source_id, source.get("content", "")),
+        ])
+        for keyword in _extract_source_keywords(source, theme_keywords):
+            facts.append(_metta_atom("SourceKeyword", source_id, keyword))
+
+    
+    _append_atomspace_facts(facts)
+    return facts
