@@ -29,6 +29,7 @@ TAVILY_SEARCH_AGENT_ADDRESS = os.environ.get(
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_EDITORIAL_PROVIDER = "Bedrock"
 DEFAULT_EDITORIAL_MAX_TOKENS = 1800
+EDITORIAL_ATOMSPACE_MEMORY = PROJECT_ROOT / "memory" / "editorial_memory.metta"
 
 
 class WebSearchRequest(Model):
