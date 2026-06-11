@@ -749,3 +749,19 @@ def assert_sources_to_atomspace(raw_sources, context):
     
     _append_atomspace_facts(facts)
     return facts
+
+
+def atomspace_extract_themes(raw_sources, context):
+    theme_keywords = _read_theme_keywords_from_metta(context)
+    scores = {theme: 0 for theme in theme_keywords}
+
+    for source in raw_sources:
+        text = f"{source.get('title', '')} {source.get('content', '')}".lower()
+        for theme, keywords in theme_keywords.items():
+            scores[theme] += sum(text.count(keyword.lower()) for keyword in keywords)
+
+    return {
+        theme: score
+        for theme, score in scores.items()
+        if theme in context.get("beats", scores.keys())
+    }
