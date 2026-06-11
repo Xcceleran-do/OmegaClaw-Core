@@ -687,3 +687,22 @@ def _read_theme_mentions_from_metta():
     ):
         mentions[theme.replace('\\"', '"')] = int(count)
     return mentions
+
+
+
+def _read_theme_keywords_from_metta(context=None):
+    keywords = _default_theme_keywords(context)
+    if not EDITORIAL_ATOMSPACE_MEMORY.exists():
+        return keywords
+
+    text = EDITORIAL_ATOMSPACE_MEMORY.read_text()
+    for theme, keyword in re.findall(
+        r'\(ThemeKeyword\s+"((?:\\.|[^"])*)"\s+"((?:\\.|[^"])*)"\)',
+        text,
+    ):
+        clean_theme = theme.replace('\\"', '"')
+        clean_keyword = keyword.replace('\\"', '"')
+        keywords.setdefault(clean_theme, [])
+        if clean_keyword not in keywords[clean_theme]:
+            keywords[clean_theme].append(clean_keyword)
+    return keywords
