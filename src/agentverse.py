@@ -656,3 +656,34 @@ def _default_theme_keywords(context=None):
         keywords.setdefault(beat, [beat.lower()])
     return keywords
 
+
+
+
+
+def _read_theme_mentions_from_json():
+    path = PROJECT_ROOT / "memory" / "editorial_memory.json"
+    try:
+        with open(path) as f:
+            memory = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    mentions = {}
+    for theme, data in memory.get("themes", {}).items():
+        if isinstance(data, dict):
+            mentions[theme] = int(data.get("mentions", 0))
+    return mentions
+
+
+def _read_theme_mentions_from_metta():
+    if not EDITORIAL_ATOMSPACE_MEMORY.exists():
+        return {}
+
+    text = EDITORIAL_ATOMSPACE_MEMORY.read_text()
+    mentions = {}
+    for theme, count in re.findall(
+        r'\(ThemeMention\s+"((?:\\.|[^"])*)"\s+"?([0-9]+)"?\)',
+        text,
+    ):
+        mentions[theme.replace('\\"', '"')] = int(count)
+    return mentions
