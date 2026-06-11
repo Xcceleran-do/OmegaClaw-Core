@@ -631,3 +631,28 @@ def _metta_atom(name: str, *args: Any) -> str:
 def _source_id(index: int, source: dict) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", source.get("topic", "source").lower()).strip("-")
     return f"{slug or 'source'}-{index + 1}"
+
+
+
+def _extract_source_keywords(source: dict, theme_keywords: dict[str, list[str]]) -> list[str]:
+    text = f"{source.get('title', '')} {source.get('content', '')}".lower()
+    keywords = set()
+    for keyword_list in theme_keywords.values():
+        for keyword in keyword_list:
+            if keyword.lower() in text:
+                keywords.add(keyword)
+    return sorted(keywords)
+
+
+def _default_theme_keywords(context=None):
+    configured_beats = (context or {}).get("beats") or []
+    keywords = {
+        "AI Agents": ["agent", "agents", "autonomous"],
+        "Open Source AI": ["open source", "github"],
+        "AGI": ["agi", "general intelligence"],
+        "Biology": ["biology", "living organisms"],
+    }
+    for beat in configured_beats:
+        keywords.setdefault(beat, [beat.lower()])
+    return keywords
+
