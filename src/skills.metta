@@ -11,6 +11,7 @@
     "- Append line to file: append-file filename string",
     ;MINDPLEX:
     "- If asked to Generate article , draft it strictly using the editorial agent, without waiting user input for topic: write-article"
+    "- Like write-article, but selects today's lead theme via NAL (Non-Axiomatic Logic) deduction and belief revision over the atomspace instead of the python heuristic: write-article-nal"
     ;COMMUNICATION CHANNELS:
     "- Send message to user: send string"
     "- Search the web: search string"
@@ -61,11 +62,26 @@
 (= (technical-analysis $ticker)
    (py-call (agentverse.technical_analysis $ticker)))
 
-(= (write-article)
-   (let $result
-        (py-call (agentverse.editorial_agent))
-        (progn (send-ui (repr $result))
-               $result)))
+
+
+;; write-article-nal: same as write-article, but selects today's lead
+;; theme via NAL deduction/revision (lib_editorial_reasoning.metta)
+;; instead of the Python score = signal*0.7 + history*0.3 heuristic.
+;; 1. gather_theme_candidates() fetches sources and returns
+;;    (ThemeSignal "<theme>" <signal> <history>) facts as a string.
+;; 2. sread parses that string into an atomspace tuple.
+;; 3. select-and-explain (lib_editorial_reasoning.metta) derives each
+;;    theme's LeadCandidate belief and returns the winner plus a
+;;    reasoning trace for every candidate.
+;; 4. finish_nal_article drafts/critiques/publishes the winning theme
+;;    and records it in memory, mirroring editorial_agent's tail end.
+(= (write-article-nal)
+   (let $candidates_str (py-call (agentverse.gather_theme_candidates))
+     (let $candidates (sread $candidates_str)
+       (let $reasoning (select-and-explain $candidates)
+         (let $result (py-call (agentverse.finish_nal_article (repr $reasoning)))
+           (progn (send-ui (repr $result))
+                  $result))))))
 
 !(import_prolog_functions_from_file (library OmegaClaw-Core ./src/skills.pl) (shell first_char gc read_file_tail))
 
