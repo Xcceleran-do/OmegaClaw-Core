@@ -1,6 +1,6 @@
 from collections import deque
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TS_RE = re.compile(r'^\("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"')
 
@@ -106,6 +106,13 @@ def balance_parentheses(s):
             sexprs.append(f"({cmd})")
     ret = " ".join(sexprs)
     return "(" + ret + ")"
+
+def seconds_until_next_time(hour, minute=0):
+    now = datetime.now()
+    target = now.replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
 
 def normalize_string(x):
     try:
