@@ -169,6 +169,7 @@ def search_mindplex(beat: str):
         "Open Source AI": "AI",
         "AGI": "AGI",
         "BGI": "BGI",
+        "Chemistry": "Chemistry",
     }
     return sources_by_topic.get(topic_aliases.get(beat, beat), [])
 
@@ -210,6 +211,7 @@ def extract_themes(raw_sources):
             "general intelligence"
         ], 
          "Biology": [
+            "humans",
             "biology",
             "living organisms"
         ]
@@ -800,6 +802,115 @@ def atomspace_cross_reference(themes):
         })
 
     return candidates
+
+
+_NAL_CYCLE_CACHE: dict[str, Any] = {}
+
+
+def gather_theme_candidates() -> str:
+    """Fetch sources, extract themes/entities, and hand evidence counts to
+    the NAL reasoner as a MeTTa string of (ThemeSignal "<theme>" <signal>
+    <history>) facts. Caches the cycle's context/sources/entities/candidates
+    so finish_nal_article can pick up where this left off."""
+    context = load_editorial_context()
+    raw_sources = fetch_sources(context)
+    entities = extract_entities(raw_sources)
+
+    assert_sources_to_atomspace(raw_sources, context)
+    themes = atomspace_extract_themes(raw_sources, context)
+    candidates = atomspace_cross_reference(themes)
+
+    _NAL_CYCLE_CACHE["context"] = context
+    _NAL_CYCLE_CACHE["raw_sources"] = raw_sources
+    _NAL_CYCLE_CACHE["entities"] = entities
+    _NAL_CYCLE_CACHE["candidates"] = candidates
+
+    facts = " ".join(
+        f"(ThemeSignal {_metta_string(c['theme'])} "
+        f"{c['signal_strength']} {c['historical_mentions']})"
+        for c in candidates
+    )
+    return f"({facts})"
+
+
+_NAL_RESULT_RE = re.compile(
+    r'^\(\(\s*(?:"((?:\\.|[^"])*)"|(\S+))\s+(-?[0-9.]+)\s+'
+    r'\(stv\s+(-?[0-9.]+)\s+(-?[0-9.]+)\)\)\s*\((.*)\)\)\s*$',
+    re.DOTALL,
+)
+
+_NAL_EXPLANATION_RE = re.compile(
+    r'\(ThemeReasoning\s+"((?:\\.|[^"])*)"\s+'
+    r'\(StrongSignalEvidence\s+([0-9]+)\)\s+'
+    r'\(RecurringEvidence\s+([0-9]+)\)\s+'
+    r'\(LeadCandidateBelief\s+\(stv\s+(-?[0-9.]+)\s+(-?[0-9.]+)\)\)\s+'
+    r'\(Expectation\s+(-?[0-9.]+)\)\)'
+)
+
+
+def _parse_nal_result(result_str: str):
+    """Parse the (repr ...) of (select-and-explain $candidates):
+    ((WinnerTheme WinnerExpectation (stv f c)) (ThemeReasoning ...)*)"""
+    match = _NAL_RESULT_RE.match(result_str.strip())
+    if not match:
+        raise ValueError(f"Could not parse NAL selection result: {result_str!r}")
+
+    quoted_theme, bare_theme, expectation, freq, conf, explanations_blob = match.groups()
+    theme = (quoted_theme or bare_theme or "").replace('\\"', '"')
+    winner = {
+        "theme": theme,
+        "expectation": float(expectation),
+        "lead_candidate_tv": (float(freq), float(conf)),
+    }
+
+    explanations = []
+    for m in _NAL_EXPLANATION_RE.finditer(explanations_blob):
+        e_theme, signal, history, e_freq, e_conf, e_exp = m.groups()
+        explanations.append({
+            "theme": e_theme.replace('\\"', '"'),
+            "signal_strength": int(signal),
+            "historical_mentions": int(history),
+            "lead_candidate_tv": (float(e_freq), float(e_conf)),
+            "expectation": float(e_exp),
+        })
+
+    return winner, explanations
+
+
+def finish_nal_article(result_str: str):
+    """Take the NAL selection result computed by lib_editorial_reasoning's
+    select-and-explain, draft/critique/publish the winning theme, and
+    record it in memory - mirroring the tail end of editorial_agent()."""
+    context = _NAL_CYCLE_CACHE.get("context") or load_editorial_context()
+    raw_sources = _NAL_CYCLE_CACHE.get("raw_sources", [])
+    entities = _NAL_CYCLE_CACHE.get("entities", {})
+    candidates = _NAL_CYCLE_CACHE.get("candidates", [])
+
+    winner, explanations = _parse_nal_result(result_str)
+
+    candidate_lookup = {c["theme"]: c for c in candidates}
+    selected_story = dict(candidate_lookup.get(winner["theme"], {"theme": winner["theme"]}))
+    selected_story["score"] = winner["expectation"]
+    selected_story["lead_candidate_tv"] = winner["lead_candidate_tv"]
+
+    article = draft_article(selected_story, sources=raw_sources, context=context, entities=entities)
+
+    critique = critique_article(article)
+    if critique:
+        return critique
+
+    publication = publish_article(article)
+    update_memory(selected_story)
+
+    return {
+        "publication": publication,
+        "selected_story": selected_story,
+        "reasoning_mode": "nal",
+        "reasoning_trace": {
+            "winner": winner,
+            "candidates": explanations,
+        },
+    }
 
 
 def atomspace_select_story(raw_sources, context):
