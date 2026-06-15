@@ -6,10 +6,12 @@
 (= (maxOutputToken) (empty))
 (= (reasoningMode) (empty))
 (= (wakeupInterval) (empty))
+(= (dailyWakeHour) (empty))
+(= (dailyWakeMinute) (empty))
 (= (spamShield) (empty))
 
 (= (initLoop)
-   (progn (configure maxNewInputLoops 50) ;20
+   (progn (configure maxNewInputLoops 1) ;20
           (configure maxWakeLoops 1)
           (configure spamShield True)
           (configure sleepInterval 1) ;10
@@ -17,7 +19,9 @@
           (configure provider Bedrock) ;Anthropic or OpenAI or ASICloud or ASIOne or Test or Bedrock
           (configure maxOutputToken 6000)
           (configure reasoningMode medium)
-          (configure wakeupInterval 600) ;600=10 minutes
+          (configure wakeupInterval 86400) ;max idle time in seconds (24h); set lower (e.g. 300=5min) via wakeupInterval=300 to wake on a fixed interval instead of/in addition to dailyWake
+          (configure dailyWakeHour 14) ;daily wake-up time (24h clock) - set to 13:57 for the 1-minute test, change back to e.g. 6 0 for production
+          (configure dailyWakeMinute 10)
           (change-state! &prevmsg "")
           (change-state! &lastresults "")
           (change-state! &loops (maxNewInputLoops))))
@@ -54,7 +58,8 @@
                                      (change-state! &loops (maxNewInputLoops)) _)))
                             (if (> (get-state &loops) 0)
                                 (let* (($lastmessage (if $msgnew (HUMAN-MSG: $msg) (if (spamShield) " DO NOT RE-SEND OR SPAM!" "")))
-                                       ($_ (change-state! &nextWakeAt (+ (get_time) (wakeupInterval))))
+                                       ($_ (change-state! &nextWakeAt (min (+ (get_time) (wakeupInterval))
+                                                                            (+ (get_time) (py-call (helper.seconds_until_next_time (dailyWakeHour) (dailyWakeMinute)))))))
                                        ($_ (println! $lastmessage))
                                        ($send (py-str ($prompt :-:-:-: $lastmessage)))
                                        ($_ (println! (CHARS_SENT: (string_length $send) $send)))
