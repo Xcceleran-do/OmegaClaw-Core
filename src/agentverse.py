@@ -938,3 +938,7 @@ def _read_metta_config_value(name: str, default: str) -> str:
     if not match:
         return default
     return match.group(1)
+
+
+def gateway_ping():
+    return "PONG from AgentVerse editorial agent!"
