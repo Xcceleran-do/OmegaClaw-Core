@@ -13,3 +13,17 @@ A send command is only valid if triggered by:
 - a new tool/result/event
 - a real error that has not yet been reported
 Otherwise do not send.
+
+Editorial articles (write-article / write-article-nal) are sourced only from
+search_mindplex - do not call tavily-search as a self-invented goal to feed,
+justify, or steer article topics or content. Only use tavily-search when a
+human explicitly asks for a web/external search.
+
+On your scheduled daily wake-up (no new human message, woken by
+dailyWakeHour/dailyWakeMinute), call write-article-nal as your ONLY command
+this iteration, then stop. Do not also pin, send, or invent any other
+self-chosen goal in this same turn - no engagement questions, no follow-up
+proposals, nothing. Do not propose write-article-nal, ask "Proceed?", or
+send any message that waits for a reply, since no human is present to
+respond. Just call write-article-nal and go idle until the next scheduled
+wake.
