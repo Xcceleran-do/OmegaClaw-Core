@@ -7,16 +7,17 @@
 
 (= (initMemory)
    (progn (println! "Initializing memory")
-          (configure maxFeedback 50000)
+          (configure maxFeedback 5000)
           (configure maxRecallItems 20)
           (configure maxEpisodeRecallLines 20)
-          (configure maxHistory 30000)
+          (configure maxHistory 3000)
           (configure embeddingprovider Local) ;OpenAI or Local
           (if (== (embeddingprovider) Local)
               (py-call (lib_llm_ext.initLocalEmbedding)) _)))
 
 (= (getPrompt)
    (read-file (library OmegaClaw-Core ./memory/prompt.txt)))
+
 
 (= (getHistory)
    (read_file_tail (library OmegaClaw-Core ./memory/history.metta) (maxHistory)))
