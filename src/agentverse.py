@@ -6,6 +6,21 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import urllib.request as _urlreq
+
+
+def _load_env_file():
+    for candidate in [Path(__file__).resolve().parent.parent.parent.parent / ".env",
+                      Path(__file__).resolve().parent.parent.parent / ".env"]:
+        if candidate.exists():
+            for line in candidate.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, _, v = line.partition("=")
+                    os.environ.setdefault(k.strip(), v.strip())
+            break
+
+_load_env_file()
 
 try:
     from uagents import Model
@@ -374,32 +389,27 @@ def _fallback_article(story, sources, context):
         source.get("title", "Untitled source")
         for source in sources
         if source.get("topic") == theme
-    ][:3]
-    if not source_titles:
-        source_titles = [
-            source.get("title", "Untitled source")
-            for source in sources
-        ][:3]
-
+    ][:3] or [source.get("title", "Untitled source") for source in sources][:3]
     evidence = "; ".join(source_titles) or "the collected editorial source summaries"
 
-    return f"""
-Theme:
-{theme}
-
-Score:
-{score}
-
-Article Draft:
-
-{publication} is tracking {theme} as today's strongest editorial candidate, with a signal score of {score}. According to the collected source summaries, especially {evidence}, the topic is showing enough activity to merit a focused draft rather than a generic trend note.
-
-The central story is that {theme} is moving from abstract promise into practical systems, tools, and public debate. The available source material points to recurring questions about capability, reliability, and how quickly organizations can turn research ideas into usable infrastructure. That makes the topic useful for readers who want to understand not only what changed, but why it matters.
-
-The strongest angle is the tension between momentum and evidence. There is clear interest around {theme}, but the article should avoid overclaiming until stronger primary sources are added. A publishable version should bring in concrete examples, named projects, dates, and links to original reports or papers.
-
-For now, the draft conclusion is cautious: {theme} remains a live and important beat, but it needs better sourcing before publication. The next editorial step is to replace the placeholder summaries with real references and sharpen the argument around one specific development.
-"""
+    content = (
+        f"{publication} is tracking {theme} as today's strongest editorial candidate, "
+        f"with a signal score of {score}. According to {evidence}, the topic is showing "
+        f"enough activity to merit a focused draft.\n\n"
+        f"The central story is that {theme} is moving from abstract promise into practical "
+        f"systems, tools, and public debate. The available source material points to recurring "
+        f"questions about capability, reliability, and how quickly organizations can turn "
+        f"research ideas into usable infrastructure.\n\n"
+        f"A publishable version should bring in concrete examples, named projects, dates, "
+        f"and links to original reports or papers."
+    )
+    return {
+        "theme": theme,
+        "score": score,
+        "title": f"{theme}: Today's Editorial Candidate",
+        "content": content,
+        "excerpt": f"{publication} examines {theme} as today's lead editorial theme.",
+    }
 
 
 def draft_article(story, sources=None, context=None, entities=None):
@@ -410,10 +420,19 @@ def draft_article(story, sources=None, context=None, entities=None):
     prompt = f"""You are the editorial drafting module for {context.get("publication", "AI Futures")}.
 
 Write a publication-ready article from the selected story and source summaries.
+Respond with ONLY a valid JSON object — no markdown fences, no extra text.
+
+JSON schema:
+{{
+  "theme": "<the selected theme>",
+  "score": <numeric signal score>,
+  "title": "<compelling article headline, 8-12 words>",
+  "content": "<full article body, 500-800 words, paragraphs separated by \\n\\n>",
+  "excerpt": "<1-2 sentence summary for previews, max 200 chars>"
+}}
 
 Requirements:
-- Use the exact section labels: Theme:, Score:, Article Draft:
-- Write 500-800 words.
+- Write 500-800 words in the content field.
 - Make the article specific, analytical, and readable.
 - Use only the provided source summaries.
 - Do not invent URLs, quotes, dates, or facts.
@@ -434,109 +453,139 @@ Source summaries:
 """
 
     try:
-        article = _call_selected_provider(prompt)
+        raw = _call_selected_provider(prompt)
+        raw = str(raw).strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"\s*```$", "", raw)
+        article = json.loads(raw)
+        if not isinstance(article, dict) or not article.get("content"):
+            raise ValueError("Invalid structure")
+        return article
     except Exception as e:
         print(f"LLM draft generation failed: {e}")
         return _fallback_article(story, sources, context)
 
-    article = str(article).strip()
-    if not article:
-        return _fallback_article(story, sources, context)
-
-    return article
-
 def critique_article(article):
-    article_text = str(article).strip()
+    if not isinstance(article, dict):
+        return {
+            "publication": {"success": False, "status": "needs-revision"},
+            "critique": {"approved": False, "issues": [{"severity": "major", "message": "Article is not structured JSON."}]},
+            "followups": ["Return a valid JSON article object."],
+        }
+
+    content = str(article.get("content", "")).strip()
     issues = []
     recommendations = []
 
-    words = re.findall(r"\b[\w'-]+\b", article_text)
-    word_count = len(words)
-
-    if word_count < 120:
+    required_keys = ["title", "content", "theme"]
+    missing_keys = [k for k in required_keys if not article.get(k)]
+    if missing_keys:
         issues.append({
             "severity": "major",
-            "message": "Draft is too short for publication.",
+            "message": f"Article is missing required fields: {', '.join(missing_keys)}",
         })
+        recommendations.append("Ensure title, content, and theme fields are present and non-empty.")
+
+    words = re.findall(r"\b[\w'-]+\b", content)
+    word_count = len(words)
+    if word_count < 120:
+        issues.append({"severity": "major", "message": "Draft is too short for publication."})
         recommendations.append("Expand the draft with a clear lead, context, evidence, and implications.")
 
-    required_sections = [
-        "Theme:",
-        "Score:",
-        "Article Draft:",
-    ]
-    missing_sections = [
-        section for section in required_sections
-        if section.lower() not in article_text.lower()
-    ]
-    if missing_sections:
-        issues.append({
-            "severity": "major",
-            "message": f"Draft is missing required sections: {', '.join(missing_sections)}",
-        })
-        recommendations.append("Keep the generated article structured with theme, score, and article body sections.")
-
-    source_signals = [
-        "http://",
-        "https://",
-        "source:",
-        "according to",
-        "reported",
-        "study",
-        "paper",
-    ]
-    if not any(signal in article_text.lower() for signal in source_signals):
-        issues.append({
-            "severity": "major",
-            "message": "Draft does not cite or mention supporting sources.",
-        })
+    source_signals = ["http://", "https://", "source:", "according to", "reported", "study", "paper"]
+    if content and not any(signal in content.lower() for signal in source_signals):
+        issues.append({"severity": "major", "message": "Draft does not cite or mention supporting sources."})
         recommendations.append("Add source-backed evidence before publication.")
 
-    if "example.com" in article_text.lower():
-        issues.append({
-            "severity": "critical",
-            "message": "Draft contains placeholder source material.",
-        })
+    if "example.com" in content.lower():
+        issues.append({"severity": "critical", "message": "Draft contains placeholder source material."})
         recommendations.append("Replace placeholder sources with real source references.")
 
-    if "continues an ongoing trend" in article_text.lower():
-        issues.append({
-            "severity": "minor",
-            "message": "Draft uses generic placeholder language.",
-        })
+    if "continues an ongoing trend" in content.lower():
+        issues.append({"severity": "minor", "message": "Draft uses generic placeholder language."})
         recommendations.append("Replace generic phrasing with specific developments and concrete stakes.")
 
-    approved = not any(
-        issue["severity"] in {"critical", "major"}
-        for issue in issues
-    )
-
-    critique = {
-        "approved": approved,
-        "word_count": word_count,
-        "issues": issues,
-        "recommendations": recommendations,
-    }
+    approved = not any(issue["severity"] in {"critical", "major"} for issue in issues)
+    critique = {"approved": approved, "word_count": word_count, "issues": issues, "recommendations": recommendations}
 
     if approved:
         return None
 
     return {
-        "publication": {
-            "success": False,
-            "status": "needs-revision",
-            "content": article_text,
-        },
+        "publication": {"success": False, "status": "needs-revision", "content": content},
         "critique": critique,
         "followups": recommendations,
     }
 
-def publish_article(article):
-    return {
-        "success": True,
-        "status": "draft-only",
-        "content": article,
+
+
+def parse_article_for_mindplex(article):
+
+    title = article.get("title", "Untitled")
+    content = article.get("content", "")
+    excerpt = article.get("excerpt", title)[:300]
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    word_count = len(re.findall(r"\b\w+\b", content))
+    reading_minutes = max(1, round(word_count / 200))
+
+    payload = {
+        "title": title,
+        "slug": slug,
+        "content": content,
+        "excerpt": excerpt,
+        "status": "published",
+        "type": "article",
+        "estimatedReadingMinutes": reading_minutes,
+        "publishedAt": datetime.now(timezone.utc).isoformat(),
     }
+
+    return payload
+
+
+def publish_article(article):
+
+    payload= parse_article_for_mindplex(article)
+    
+    api_url = os.environ.get("MINDPLEX_API_URL", "http://localhost:3000/v1/posts")
+    token = os.environ.get("MINDPLEX_API_TOKEN", "")
+
+    try:
+        data = json.dumps(payload).encode()
+        req = _urlreq.Request(
+            api_url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+            method="POST",
+        )
+        with _urlreq.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode())
+            data = result.get("data", result)
+            return {
+                "success": True,
+                "status": "published",
+                "article_id": data.get("id") or data.get("slug") or slug,
+                "title": title,
+                "response": result,
+            }
+    except _urlreq.HTTPError as e:
+        error_body = e.read().decode(errors="replace")
+        print(f"[publish_article] HTTP {e.code}: {error_body}")
+        return {
+            "success": False,
+            "status": "publish-failed",
+            "error": f"HTTP {e.code}",
+            "api_message": error_body,
+        }
+    except Exception as e:
+        print(f"[publish_article] publish failed: {e}")
+        return {
+            "success": False,
+            "status": "publish-failed",
+            "error": str(e),
+        }
 
 
 def create_followups(story):
