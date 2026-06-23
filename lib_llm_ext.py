@@ -2,6 +2,7 @@ import json
 import re
 import os, openai
 from typing import Optional
+from caveman_arch import compress_context
 
 try:
     import boto3
@@ -59,13 +60,14 @@ class AIProvider(AbstractAIProvider):
         return bool(os.environ.get(self._var_name))
 
     def chat(self, content: str, max_tokens: int = 6000, **kwargs) -> str:
-        """Send chat request, initializing client if needed."""
         self._ensure_client()
-
         if self._client is None:
             raise RuntimeError(f"{self.name} not configured (set {self._var_name})")
 
+        # Clean _quote_/_apostrophe_ artifacts before sending
+        content = content.replace("_quote_", '"').replace("_apostrophe_", "'")
         content = content.replace(":-:-:-:", " ")
+        
         try:
             response = self._client.chat.completions.create(
                 model=self._model_name,
@@ -73,10 +75,9 @@ class AIProvider(AbstractAIProvider):
                 max_tokens=max_tokens,
                 **kwargs
             )
-
             return self._clean_text(response.choices[0].message.content)
         except Exception as e:
-            print(f"[lib_llm_ext.AIProvider.chat] Exception while communicating with LLM: {e}")
+            print(f"[lib_llm_ext.AIProvider.chat] Exception: {e}")
             return ""
 
     def _clean_text(self, text: str) -> str:
@@ -150,25 +151,22 @@ class BedrockProvider(AbstractAIProvider):
 
     def chat(self, content: str, max_tokens: int = 6000, **kwargs) -> str:
         self._ensure_client()
-
         if self._client is None:
-            raise RuntimeError(
-                "Bedrock provider not configured. Set AWS_REGION/AWS_DEFAULT_REGION and AWS credentials in the environment or AWS config."
-            )
+            raise RuntimeError("Bedrock provider not configured.")
 
+        # Clean artifacts
+        content = content.replace("_quote_", '"').replace("_apostrophe_", "'")
+        
         model_id = os.environ.get("AWS_BEDROCK_MODEL_ID", self._model_name)
-
         try:
             response = self._client.converse(
                 modelId=model_id,
-                messages=[
-                    {"role": "user", "content": [{"text": content}]}
-                ],
+                messages=[{"role": "user", "content": [{"text": content}]}],
                 inferenceConfig={"maxTokens": max_tokens},
             )
             return self._clean_text(response["output"]["message"]["content"][0]["text"])
         except Exception as e:
-            print(f"[lib_llm_ext.BedrockProvider.chat] Exception while communicating with Bedrock: {e}")
+            print(f"[lib_llm_ext.BedrockProvider.chat] Exception: {e}")
             return ""
 
 class TestProvider(AbstractAIProvider):
@@ -222,12 +220,16 @@ _register_provider(name="OpenAI", var_name="OPENAI_API_KEY", model_name="gpt-5.4
 
 
 def callProvider(provider_name: str, content: str, max_tokens: int = 6000) -> str:
+
     """Generic dispatcher for MeTTa."""
+    # Compress before sending — all Caveman savings happen here
+
+    print(f"[callProvider] called with provider={provider_name}, len={len(content)}")
+    content = compress_context(content)
     provider = _get_provider(provider_name)
     if not provider or not provider.is_available:
         raise RuntimeError(f"Provider '{provider_name}' not available")
     return provider.chat(content=content, max_tokens=max_tokens)
-
 
 
 def _chatAsiOne(client, model, content, max_tokens=6000, **kwargs):
@@ -276,6 +278,4 @@ def useLocalEmbedding(atom):
         atom,
         normalize_embeddings=True
     ).tolist()
-
-
 
