@@ -4,3 +4,10 @@ janus-swi
 openai
 uagents
 boto3
+apscheduler
+requests
+httpx
+beautifulsoup4
+feedparser
+pydantic
+python-dotenv
