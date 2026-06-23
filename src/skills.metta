@@ -4,6 +4,7 @@
     "- Query long-term embedding memory for skills and memories with short phrases only: query string"
     "- Episodes searches history for episodes around a time stamp, time format is same as in TIME: episodes time_string"
     "- Pin a certain string as short-term working memory item to keep track of task state: pin string"
+    "- Do nothing when no valid trigger exists, never explain reasoning: noop"
     ;SHELL AND FILE I/O:
     "- Execute shell command without apostrophe in string, it returns the command output to you: shell string"
     "- Read file to string: read-file filename"
@@ -13,6 +14,8 @@
     "- Send message to user: send string"
     "- Search the web: search string"
     "- Search the web using the Tavily Search Agent: tavily-search string"
+    "- Research a topic, summarize findings, and cite sources: research-cite topic"
+    "- Research a topic and summarize findings with AI: ai-research topic"
     "- Get technical analysis for a stock ticker using the Technical Analysis Agent: technical-analysis ticker"
     ;CODE EXECUTION:
     "- Execute MeTTa expression: metta sexpression"
@@ -51,6 +54,12 @@
 (= (tavily-search $query)
    (py-call (agentverse.tavily_search $query)))
 
+(= (research-cite $topic)
+   (py-call (agentverse.ai_research $topic)))
+
+(= (ai-research $topic)
+   (py-call (agentverse.ai_research $topic)))
+
 (= (technical-analysis $ticker)
    (py-call (agentverse.technical_analysis $ticker)))
 
@@ -62,3 +71,6 @@
 
 (= (pin $x)
    PIN-SUCCESS)
+
+(= (noop)
+   NOOP-SUCCESS)
