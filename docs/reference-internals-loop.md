@@ -35,6 +35,7 @@ Also creates shared state slots:
    - `OpenAI` → `useGPT`
    - `Anthropic` → `lib_llm_ext.useClaude`
    - `ASICloud` → `lib_llm_ext.useMiniMax`
+   - `Bedrock`  → `lib_llm_ext.useBedrock`
    - else → `lib_llm_ext.useAsi1`
 7. **Repair parentheses** — `helper.balance_parentheses` fixes common mismatches before parsing.
 8. **Parse** — `sread` on the repaired string; if it does not start with `(`, the loop feeds back a reminder prompt.

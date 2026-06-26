@@ -95,7 +95,8 @@ Before running the system you need to choose your LLM API provider and export th
 
 Run the system via the following command which ensures the system is started from the root folder of PeTTa:
 ```
-OMEGACLAW_AUTH_SECRET=<channel-secret> sh run.sh run.metta provider=Bedrock IRC_channel="<irc-channel>"
+OMEGACLAW_AUTH_SECRET=<channel-secret> sh run.sh run.metta IRC_channel="<irc-channel>"  
+# Optional: specify LLM provider (e.g., provider=Bedrock)
 ```
 After start go to https://webchat.quakenet.org/ to communicate with the agent. Join `<irc-channel>` and after agent is joined send `auth <channel-secret>` message to authenticate yourself as an agent owner. Please replace `<irc-channel>` and `<channel-secret>` by your own values.
 

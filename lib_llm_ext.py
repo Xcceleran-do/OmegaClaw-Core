@@ -2,7 +2,6 @@ import json
 import re
 import os, openai
 from typing import Optional
-from caveman_arch import compress_context
 
 try:
     import boto3
@@ -222,10 +221,6 @@ _register_provider(name="OpenAI", var_name="OPENAI_API_KEY", model_name="gpt-5.4
 def callProvider(provider_name: str, content: str, max_tokens: int = 6000) -> str:
 
     """Generic dispatcher for MeTTa."""
-    # Compress before sending — all Caveman savings happen here
-
-    print(f"[callProvider] called with provider={provider_name}, len={len(content)}")
-    content = compress_context(content)
     provider = _get_provider(provider_name)
     if not provider or not provider.is_available:
         raise RuntimeError(f"Provider '{provider_name}' not available")
