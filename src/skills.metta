@@ -63,6 +63,9 @@
 (= (technical-analysis $ticker)
    (py-call (agentverse.technical_analysis $ticker)))
 
+(= (check-halt)
+   (py-call (control.check_halt_flag)))
+
 !(import_prolog_functions_from_file (library OmegaClaw-Core ./src/skills.pl) (shell first_char gc read_file_tail))
 
 (= (metta $str)

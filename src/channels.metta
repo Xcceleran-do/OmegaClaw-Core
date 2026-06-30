@@ -13,6 +13,7 @@
 (= (SL_BOT_TOKEN) (empty))
 (= (SL_CHANNEL_ID) (empty))
 (= (SL_POLL_INTERVAL) (empty))
+(= (CONTROL_port) (empty))
 
 ;Connect all the channels:
 (= (initChannels)
@@ -37,7 +38,10 @@
                       (progn (configure MM_URL "https://chat.singularitynet.io")
                              (configure MM_CHANNEL_ID "8fjrmabjx7gupy7e5kjznpt5qh")
                              (configure MM_BOT_TOKEN "")
-                             (py-call (mattermost.start_mattermost (MM_URL) (MM_CHANNEL_ID) (MM_BOT_TOKEN)))))))))
+                             (py-call (mattermost.start_mattermost (MM_URL) (MM_CHANNEL_ID) (MM_BOT_TOKEN)))))))
+          ; ── Control API — always starts regardless of commchannel ──
+          (configure CONTROL_port 7979)
+          (py-call (control.start_control (CONTROL_port)))))
 
 ;Receive the latest user message considering all communication channels:
 (= (receive)

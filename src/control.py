@@ -1,0 +1,82 @@
+# src/control.py — OmegaClaw shutdown control API
+import os
+import signal
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+_auth_secret = os.environ.get("OMEGACLAW_AUTH_SECRET", "")
+_pid = os.getpid()
+_HALT_FLAG_PATH = "/tmp/omegaclaw_halt.flag"
+
+
+def _do_halt():
+    print("[control] HALT — writing flag, waiting for clean loop exit")
+    with open(_HALT_FLAG_PATH, "w") as f:
+        f.write("halt")
+
+
+def _do_shutdown():
+    print("[control] SHUTDOWN — sending SIGKILL")
+    os.kill(_pid, signal.SIGKILL)
+
+
+class ControlHandler(BaseHTTPRequestHandler):
+
+    def _check_auth(self):
+        return self.headers.get("X-Auth-Secret", "") == _auth_secret
+
+    def do_POST(self):
+        if not self._check_auth():
+            self._respond(401, "unauthorized")
+            return
+        if self.path == "/halt":
+            self._respond(200, "halting gracefully after current loop")
+            threading.Thread(target=_do_halt, daemon=True).start()
+        elif self.path == "/shutdown":
+            self._respond(200, "shutting down immediately")
+            threading.Thread(target=_do_shutdown, daemon=True).start()
+        else:
+            self._respond(404, "unknown")
+
+    def do_GET(self):
+        if self.path == "/status":
+            body = "halting" if os.path.exists(_HALT_FLAG_PATH) else "running"
+            self._respond(200, body)
+        else:
+            self._respond(404, "not found")
+
+    def _respond(self, code, msg):
+        self.send_response(code)
+        self.end_headers()
+        self.wfile.write(msg.encode())
+
+    def log_message(self, *args):
+        pass
+
+
+def start_control(port=7979):
+    if os.path.exists(_HALT_FLAG_PATH):
+        os.remove(_HALT_FLAG_PATH)
+        print("[control] cleared stale halt flag")
+    server = HTTPServer(("0.0.0.0", int(port)), ControlHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"[control] API listening on port {port}")
+
+
+def check_halt_flag() -> str:
+    exists = os.path.exists(_HALT_FLAG_PATH)
+    print(f"[control] check_halt_flag called, result={exists}")
+    return "True" if exists else "False"
+
+def clear_halt_flag():
+    if os.path.exists(_HALT_FLAG_PATH):
+        os.remove(_HALT_FLAG_PATH)
+        print("[control] cleared stale halt flag")
+
+def getLastMessage():
+    return ""
+
+
+def send_message(msg):
+    pass
