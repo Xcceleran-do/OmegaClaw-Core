@@ -1,0 +1,27 @@
+{
+  "publication": "AI Futures",
+  "reasoning_mode": "atomspace",
+
+  "beats": [
+    "AI Agents",
+    "Open Source AI",
+    "AGI","Biology",
+    "Chemistry"
+  ],
+
+  "watchlists": {
+    "people": [
+      "Ben Goertzel"
+    ],
+    "companies": [
+      "OpenAI",
+      "Anthropic"
+    ]
+  },
+
+  "source_priority": [
+    "arxiv",
+    "github",
+    "mindplex"
+  ]
+}
