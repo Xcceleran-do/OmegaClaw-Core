@@ -1,4 +1,3 @@
-# src/control.py — OmegaClaw shutdown control + startup cleanup
 import os
 import re
 import signal
@@ -79,9 +78,6 @@ class ControlHandler(BaseHTTPRequestHandler):
 
 
 def start_control(port=7979):
-    print(f"[control] start_control called, port={port}")
-    print(f"[control] history path: {_HISTORY_PATH}")
-    print(f"[control] history exists: {os.path.exists(_HISTORY_PATH)}")
     # Clean stale halt flag
     if os.path.exists(_HALT_FLAG_PATH):
         os.remove(_HALT_FLAG_PATH)
@@ -96,18 +92,20 @@ def start_control(port=7979):
     print(f"[control] API listening on port {port}")
 
 
+def check_halt_flag() -> int:
+    exists = os.path.exists(_HALT_FLAG_PATH)
+    print(f"[control] check_halt_flag={exists}")
+    return 1 if exists else 0
+
+
+def halt_agent():
+    print("[control] halt_agent called — exiting process")
+    os.kill(_pid, signal.SIGTERM)
+
+
 def getLastMessage():
     return ""
 
 
 def send_message(msg):
     pass
-
-def check_halt_flag() -> str:
-    exists = os.path.exists(_HALT_FLAG_PATH)
-    print(f"[control] check_halt_flag={exists}")
-    return 1 if exists else 0
-
-def halt_agent():
-    print("[control] halt_agent called — exiting process")
-    os.kill(_pid, signal.SIGTERM)
