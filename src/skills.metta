@@ -11,6 +11,7 @@
     "- Append line to file: append-file filename string",
     ;COMMUNICATION CHANNELS:
     "- Send message to user: send string"
+    "- Reply to a Mindplex reader comment on a post: handle-comment post_id comment_id"
     "- Search the web: search string"
     "- Search the web using the Tavily Search Agent: tavily-search string"
     "- Get technical analysis for a stock ticker using the Technical Analysis Agent: technical-analysis ticker"
@@ -47,6 +48,9 @@
           (translatePredicate (nl $Out)),
           (translatePredicate (close $Out))
           APPEND-FILE-SUCCESS))
+
+(= (handle-comment $post_id $comment_id)
+   (py-call (agentverse.handle_comment $post_id $comment_id)))
 
 (= (tavily-search $query)
    (py-call (agentverse.tavily_search $query)))
