@@ -35,6 +35,16 @@ import agentverse
 import inngest
 from inngest._internal.comm_lib import CommHandler, CommRequest
 
+
+def _get_mindplex():
+    """Return the mindplex module instance already loaded by MeTTa, falling back to a fresh import."""
+    key = next((k for k in sys.modules if 'mindplex' in k), None)
+    mod = sys.modules.get(key) if key else None
+    print(f"[inngest] _get_mindplex: key={key!r} queue_size={mod._q.qsize() if mod else 'N/A'}")
+    if mod is None:
+        from channels import mindplex as mod
+    return mod
+
 PORT = int(os.environ.get("INNGEST_PORT", "8788"))
 AUTHOR_ID = int(os.environ.get("MINDPLEX_AUTHOR_ID", "4"))
 SERVE_PATH = "/api/inngest"
@@ -64,11 +74,21 @@ def handle_comment_created(ctx: inngest.Context, step: inngest.StepSync) -> dict
         print(f"[handle_comment_created] skipping self-comment from actor {actor_id}")
         return {"status": "skipped", "reason": "self-comment"}
 
-    result = step.run(
-        "draft-and-post-reply",
-        lambda: agentverse.handle_comment(post_id, comment_id),
+    preview = event_data.get("subject", {}).get("content", "")[:120]
+    engagement_mode = os.environ.get("ENGAGEMENT_MODE", "channel")
+
+    if engagement_mode == "direct":
+        result = step.run(
+            "draft-and-post-reply",
+            lambda: agentverse.handle_comment(post_id, comment_id),
+        )
+        return {"status": "handled", "result": result}
+
+    step.run(
+        "enqueue-for-skill-selection",
+        lambda: _get_mindplex().enqueue(post_id, comment_id, preview) or {"status": "queued"},
     )
-    return {"status": "handled", "result": result}
+    return {"status": "queued", "post_id": post_id, "comment_id": comment_id}
 
 
 comm = CommHandler(
@@ -125,7 +145,12 @@ class InngestHandler(BaseHTTPRequestHandler):
         print(f"[inngest] {fmt % args}")
 
 
-if __name__ == "__main__":
+def build_server() -> ThreadingHTTPServer:
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer(("0.0.0.0", PORT), InngestHandler)
     print(f"Inngest server listening on http://0.0.0.0:{PORT}{SERVE_PATH}")
-    server.serve_forever()
+    return server
+
+
+if __name__ == "__main__":
+    build_server().serve_forever()
