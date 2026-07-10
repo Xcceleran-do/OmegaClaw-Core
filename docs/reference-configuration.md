@@ -33,6 +33,14 @@ This reads a command-line override via `argk` (`name=value` on the MeTTa command
 | `maxHistory` | 30000 (chars) | Tail of `memory/history.metta` included in the prompt. |
 | `embeddingprovider` | `Local` | `Local` (Python-side model) or `OpenAI`. |
 
+## Reasoning skills
+
+| Environment variable | Meaning |
+|---|---|
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key used by the DSPy-backed `atomize` and `extract-metadata` skills. |
+| `GEMINI_MODEL` | Optional Gemini model override. Default: `gemini/gemini-2.5-flash`. |
+| `GEMINI_TEMPERATURE` | Optional Gemini temperature override. Default: `0.0`. |
+
 ## Channels (`src/channels.metta`, `initChannels`)
 
 | Parameter | Default | Meaning |

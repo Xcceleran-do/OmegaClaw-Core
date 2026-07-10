@@ -11,6 +11,8 @@ Probabilistic Logic Networks (PLN) — a higher-order probabilistic reasoning fr
 | `Inheritance` | Probabilistic "is-a" relation. |
 | `Implication` | Conditional probability — `(Implication P Q)` ≈ `P(Q | P)`. |
 | `IntSet` | Intensional set — members share a property. |
+| `Product` | Ordered tuple for binary relations, e.g. `(Inheritance (Product anna bob) friend)`. |
+| `Evaluation` | Predicate application, normally with `(Predicate p)` and `(List (Concept x) ...)`. |
 
 Truth values share NAL's `(stv frequency confidence)` format, interpreted probabilistically.
 
@@ -18,7 +20,16 @@ Truth values share NAL's `(stv frequency confidence)` format, interpreted probab
 
 ## The `|~` operator
 
-`|~` applies PLN rules. OmegaClaw's current deployment supports a useful subset; the rest are left to NAL or future work.
+`|~` applies one PLN step over two truth-valued premises:
+
+```metta
+(|~ ((premise-1) (stv f1 c1))
+    ((premise-2) (stv f2 c2)))
+```
+
+OmegaClaw's bundled `lib_pln.metta` exposes this local two-premise operator. Newer upstream TrueAGI PLN examples often use `PLN.Query` over a `Sentence` knowledge base; that is useful reference material, but it is a different interface from OmegaClaw's stock skill surface.
+
+If the raw evaluator returns a value beginning with `(partial |~ ...)`, the call had only one premise. If it returns `()`, the premises did not match any supported PLN rule. Neither is a PLN conclusion and neither should be treated as evidence.
 
 ---
 
@@ -38,6 +49,14 @@ c = f₁ × f₂ × c₁ × c₂
 ```
 
 Same shape as NAL deduction — confidence decays linearly.
+
+For rules with more than one antecedent, prefer nested implications:
+
+```metta
+((Implication P (Implication Q R)) (stv 1.0 0.8))
+```
+
+Do not use `(And P Q)` as the antecedent in OmegaClaw's executable PLN calls. The bundled `|~` modus ponens rule consumes one antecedent per step.
 
 ### Abduction (on Inheritance premises)
 
@@ -82,12 +101,55 @@ Through the `(metta ...)` skill. Variables use `$1`, `$2`, …
 ### Modus Ponens example
 
 ```metta
-(metta (|~ ((Implication (Inheritance $1 (IntSet Feathered))
-                         (Inheritance $1 Bird)) (stv 1.0 0.9))
-           ((Inheritance Pingu (IntSet Feathered)) (stv 1.0 0.9))))
+(metta (|~ ((Implication (Inheritance $1 (IntSet feathered))
+                         (Inheritance $1 bird)) (stv 1.0 0.9))
+           ((Inheritance pingu (IntSet feathered)) (stv 1.0 0.9))))
 ```
 
-Conclusion: `(Inheritance Pingu Bird)` with a derived `(stv ...)`.
+Conclusion: `(Inheritance pingu bird)` with a derived `(stv ...)`.
+
+### Two-condition rule
+
+Run one `|~` step per antecedent:
+
+```metta
+(metta (|~ ((Implication (Inheritance $1 (IntSet small_length))
+                         (Implication (Inheritance $1 (IntSet ai_topic))
+                                      (Inheritance $1 (IntSet high_engagement)))) (stv 1.0 0.75))
+           ((Inheritance article_1 (IntSet small_length)) (stv 1.0 0.8))))
+```
+
+Then use the returned implication with the second fact:
+
+```metta
+(metta (|~ ((Implication (Inheritance article_1 (IntSet ai_topic))
+                         (Inheritance article_1 (IntSet high_engagement))) (stv 1.0 0.6))
+           ((Inheritance article_1 (IntSet ai_topic)) (stv 1.0 0.8))))
+```
+
+### Binary relation fact
+
+Use `Product` for relation arguments:
+
+```metta
+(metta (|~ ((Implication (Inheritance (Product $1 $2) friend)
+                         (Implication (Inheritance $1 (IntSet smokes))
+                                      (Inheritance $2 (IntSet smokes)))) (stv 0.4 0.9))
+           ((Inheritance (Product anna bob) friend) (stv 1.0 0.9))))
+```
+
+### Predicate evaluation form
+
+Use `Evaluation` for predicate-as-predicate rules, especially when using the dedicated evaluation/inheritance rules:
+
+```metta
+(metta (|~ ((Evaluation (Predicate is_really_fat)
+                        (List (Concept cat))) (stv 1.0 0.9))
+           ((Implication (Predicate is_really_fat)
+                         (Predicate is_fat)) (stv 1.0 0.9))))
+```
+
+For ordinary natural-language properties such as "high engagement", prefer `Inheritance article_1 (IntSet high_engagement)` instead of `Evaluation`.
 
 ### Abduction example
 

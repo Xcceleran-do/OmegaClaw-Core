@@ -45,6 +45,8 @@ The result of the ChromaDB write (internally). The agent treats a successful cal
 ### Purpose
 Return up to `maxRecallItems` memory entries whose embeddings are closest to the embedding of `string`.
 
+This is long-term memory recall, not logical question answering. For a reasoning premise plus target question, pass the whole premise/question text to `atomize`; do not send the target question to `query`.
+
 ### Parameters
 - `string` — a short descriptive phrase. Over-long queries dilute similarity scores.
 

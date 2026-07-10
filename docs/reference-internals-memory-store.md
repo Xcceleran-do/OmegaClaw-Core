@@ -30,7 +30,7 @@ Holds the agent's current task state: what it is doing, what step comes next, wh
 
 ### Do not use it for
 - Anything that must survive a restart — use `remember` instead.
-- Structured knowledge the reasoner should act on — atomize into AtomSpace via `(metta ...)`.
+- Structured knowledge the reasoner should act on — atomize first, then pass returned atoms to `(metta ...)` on the next cycle.
 
 ---
 
@@ -89,7 +89,7 @@ The loader skips the step when the folder is missing, or when the folder exists 
 
 ### Do not use it for
 - Ephemeral scratchpad state — use `pin`.
-- Knowledge you intend to reason over in the same turn — atomize via `(metta ...)`.
+- Knowledge you intend to reason over — atomize first, then reason over returned atoms with `(metta ...)`.
 
 ---
 
@@ -150,7 +150,7 @@ A reasoning-heavy turn typically cycles through all three tiers:
 ```
 1. query     — recall relevant past findings (Tier 2)
 2. atomize   — convert relevant knowledge into MeTTa atoms (Tier 3)
-3. reason    — (metta (|- ...)) over atoms
+3. reason    — on the next cycle, run (metta (|- ...)) over returned atoms
 4. remember  — store novel conclusions with provenance (Tier 2)
 5. pin       — capture reasoning state for next cycle (Tier 1)
 ```

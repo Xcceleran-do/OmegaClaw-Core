@@ -523,6 +523,10 @@ start() {
             --tmpfs /run:size=16m,mode=755
             --volume omegaclaw-memory:/PeTTa/repos/OmegaClaw-Core/memory
             -e "${api_token_var}"="${api_token}"
+            -e "GEMINI_API_KEY=${GEMINI_API_KEY:-}"
+            -e "GOOGLE_API_KEY=${GOOGLE_API_KEY:-}"
+            -e "GEMINI_MODEL=${GEMINI_MODEL:-}"
+            -e "GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-}"
             -e "TG_BOT_TOKEN=${TG_BOT_TOKEN:-}"
             -e "SL_BOT_TOKEN=${SL_BOT_TOKEN:-}"
             -e OMEGACLAW_AUTH_SECRET="$OMEGACLAW_AUTH_SECRET"

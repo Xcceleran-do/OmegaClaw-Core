@@ -99,12 +99,12 @@ Conclusion: `(--> golden_retriever smart) (stv 0.25 0.36)`. The low confidence c
 ### Example 7 — Forward chaining (Modus Ponens)
 
 ```metta
-(metta (|~ ((Implication (Inheritance $1 (IntSet Feathered))
-                         (Inheritance $1 Bird)) (stv 1.0 0.9))
-           ((Inheritance Pingu (IntSet Feathered)) (stv 1.0 0.9))))
+(metta (|~ ((Implication (Inheritance $1 (IntSet feathered))
+                         (Inheritance $1 bird)) (stv 1.0 0.9))
+           ((Inheritance pingu (IntSet feathered)) (stv 1.0 0.9))))
 ```
 
-Conclusion: `(Inheritance Pingu Bird)` with a derived `(stv ...)` by the same `f₁ × f₂, f₁ × f₂ × c₁ × c₂` formula as NAL deduction.
+Conclusion: `(Inheritance pingu bird)` with a derived `(stv ...)` by the same `f₁ × f₂, f₁ × f₂ × c₁ × c₂` formula as NAL deduction.
 
 ### Example 8 — PLN abduction on inheritance
 

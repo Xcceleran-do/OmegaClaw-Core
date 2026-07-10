@@ -85,9 +85,10 @@ A canonical decomposition for a non-trivial question:
 | Cycle | Commands |
 |---|---|
 | 1 | `query` memory, `search` / `tavily-search` for missing facts, `pin` the plan. |
-| 2 | Atomize verified facts, run first `(metta (\|- ...))` step. |
-| 3 | Revision with independent evidence; follow-up inference. |
-| 4 | Threshold check; `send` the answer with provenance. |
+| 2 | Atomize verified facts and wait for the returned atoms. |
+| 3 | Run first `(metta (\|- ...))` step using returned atoms exactly. |
+| 4 | Revision with independent evidence; follow-up inference. |
+| 5 | Threshold check; `send` the answer with provenance. |
 
 ## 7. Avoid post-hoc rationalization
 

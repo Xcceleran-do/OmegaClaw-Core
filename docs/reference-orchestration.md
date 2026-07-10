@@ -102,9 +102,10 @@ Complex questions usually cannot fit in one cycle because the LLM must emit all 
 | Cycle | Purpose |
 |---|---|
 | 1 | Gather information — `query` memory, `search` web, read files, fetch external data. |
-| 2 | Atomize the relevant knowledge; run the first NAL or PLN step. |
-| 3 | Revision with independent evidence; follow-up inference. |
-| 4 | Threshold check; decide whether to `send` an answer. |
+| 2 | Atomize the relevant knowledge and wait for the returned atoms. |
+| 3 | Run the first NAL or PLN step using the returned atoms exactly. |
+| 4 | Revision with independent evidence; follow-up inference. |
+| 5 | Threshold check; decide whether to `send` an answer. |
 
 The LLM is expected to **pin** state between cycles so the next turn can continue from the same plan. See [tutorial-08-reliable-reasoning.md](./tutorial-08-reliable-reasoning.md).
 

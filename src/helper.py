@@ -6,7 +6,9 @@ from datetime import datetime
 TS_RE = re.compile(r'^\("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"')
 LLM_COMMANDS = {
     "append-file",
+    "atomize",
     "episodes",
+    "extract-metadata",
     "metta",
     "pin",
     "query",

@@ -1,7 +1,7 @@
 (= (getSkills)
    (;INTERNAL:
     "- Remember a particular string such as skills and memories: remember string"
-    "- Query long-term embedding memory for skills and memories with short phrases only: query string"
+    "- Query long-term embedding memory with a short search phrase only. This is semantic recall, not logical question answering; do not use it for the query part of atomization: query string"
     "- Episodes searches history for episodes around a time stamp, time format is same as in TIME: episodes time_string"
     "- Pin a certain string as short-term working memory item to keep track of task state: pin string"
     ;SHELL AND FILE I/O:
@@ -15,18 +15,13 @@
     "- Search the web using the Tavily Search Agent: tavily-search string"
     "- Get technical analysis for a stock ticker using the Technical Analysis Agent: technical-analysis ticker"
     ;CODE EXECUTION:
-    "- Execute MeTTa expression: metta sexpression"
-    "Example to invoke Non-Axiomatic Logic via MeTTa: "
-    "metta (|- ((--> (× sam garfield) friend) (stv 1.0 0.9))"
-    "          ((--> garfield animal) (stv 1.0 0.9)))"
-    "metta (|- ((==> (--> (× $1 elephant) eat) (--> $1 ([] dangerous))) (stv 1.0 0.9))"
-    "          ((--> (× tiger elephant) eat) (stv 1.0 0.9)))"
-    "Also: note the $1 for independent variables, and for negated knowledge use (stv 0.0 0.9)"
-    "Additionally |- also works for revision, to merge evidence even when the term of both premises is the same."
-    "You can also use PLN:"
-    "metta (|~ ((Implication (Inheritance $1 (IntSet Feathered))"
-    "           (Inheritance $1 Bird)) (stv 1.0 0.9))"
-    "          ((Inheritance Pingu (IntSet Feathered)) (stv 1.0 0.9)))"))
+    "- Extract article-level inference metadata such as topic, sentiment, tone, style, domain, scope, temporal framing, main claim, and evidence quality. Use only for article/corpus-length text, never for short messages or isolated claims: extract-metadata string"
+    "- Atomize the full reasoning text into a compact staged semantic workspace plus NAL/PLN facts, rules, and queries. Include all premises and the query in one call. workspace stages are provisional; items[].pln and items[].nal are atoms, not metta calls. If you call atomize, do not call anything else in that response; wait for its result: atomize string"
+    "- Execute MeTTa only after atomize/search/query results are visible in LAST_SKILL_USE_RESULTS. For atomize output, build the metta expression yourself from returned items. A PLN |~ call needs two supported truth-valued premises from items[].pln; a NAL |- call needs two supported truth-valued premises from items[].nal: metta sexpression"
+    "NAL example: metta (|- ((--> pingu ([] feathered)) (stv 1.0 0.8)) ((==> (--> $1 ([] feathered)) (--> $1 bird)) (stv 1.0 0.8)))"
+    "PLN example: metta (|~ ((Inheritance pingu (IntSet feathered)) (stv 1.0 0.8)) ((Implication (Inheritance $1 (IntSet feathered)) (Inheritance $1 bird)) (stv 1.0 0.8)))"
+    "PLN format: use links consumed by lib_pln.metta, especially Inheritance, Implication, Similarity, Evaluation, Not, Equivalence, and Member. Multi-condition rules use nested Implication, not And."
+    ))
 
 
 (= (read-file $file)
@@ -53,6 +48,12 @@
 
 (= (technical-analysis $ticker)
    (py-call (agentverse.technical_analysis $ticker)))
+
+(= (extract-metadata $str)
+   (py-call (metadata_extractor.extract_metadata $str)))
+
+(= (atomize $str)
+   (py-call (semantic_parser.atomize $str)))
 
 !(import_prolog_functions_from_file (library OmegaClaw-Core ./src/skills.pl) (shell first_char gc read_file_tail))
 

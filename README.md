@@ -139,6 +139,16 @@ If you want to skip preloading the knowledge then run `export IMPORT_KB_ON_START
 | `maxHistory` | 30000 | Tail of `memory/history.metta` included in the prompt (chars) |
 | `embeddingprovider` | `Local` | `Local` (Python-side model) or `OpenAI` (requires `OPENAI_API_KEY`) |
 
+### Reasoning skills
+
+| Environment variable | Meaning |
+|---|---|
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key used by the DSPy-backed `atomize` and `extract-metadata` skills. |
+| `GEMINI_MODEL` | Optional Gemini model override. Default: `gemini/gemini-2.5-flash`. |
+| `GEMINI_TEMPERATURE` | Optional Gemini temperature override. Default: `0.0`. |
+
+`extract-metadata` is guarded for article/corpus-length text and skips short snippets without a Gemini call.
+
 ### Channels (`src/channels.metta`)
 
 | Parameter | Default | Meaning |
