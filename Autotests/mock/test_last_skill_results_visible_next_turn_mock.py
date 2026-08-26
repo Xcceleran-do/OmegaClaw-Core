@@ -1,8 +1,8 @@
 """
 Mock test: results of skill calls in turn N are exposed to the LLM at
 turn N+1 via the LAST_SKILL_USE_RESULTS section of the assembled prompt.
-This is a one-iteration carry that lets the agent reference the output
-of (metta ...), (query ...), (shell ...) etc. without persisting it.
+Results remain task evidence until new input resets them or the configured
+feedback budget evicts them.
 
 Turn 1 mock answer dictates a metta computation. We then read the
 docker log to find the CHARS_SENT line for the NEXT iteration and

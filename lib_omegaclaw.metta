@@ -6,6 +6,7 @@
 !(import! &self (library OmegaClaw-Core lib_nal))
 !(import! &self (library OmegaClaw-Core lib_pln))
 !(import! &self (library OmegaClaw-Core ./src/helper.py))
+!(import! &self (library OmegaClaw-Core ./src/evidence.py))
 !(import! &self (library OmegaClaw-Core ./src/utils))
 !(import! &self (library OmegaClaw-Core ./src/config.py))
 !(import! &self (library OmegaClaw-Core ./src/config))
