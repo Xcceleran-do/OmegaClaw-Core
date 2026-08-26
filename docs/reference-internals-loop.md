@@ -40,13 +40,13 @@ Also initializes runtime state:
 8. **Parse** — `sread` on the repaired string; if it does not start with `(`, the loop feeds back a reminder prompt.
 9. **Dispatch skills** — `(superpose $sexpr)` runs each skill, capturing errors via `HandleError`.
 10. **Record** — `addToHistory` appends human message + response + any errors to `memory/history.metta`, provided something new happened.
-11. **Append evidence** — retain this turn's results in execution order. If `maxFeedback` is exceeded, evict whole oldest records; explicitly mark an individually oversized result before truncating it.
+11. **Append evidence** — when the turn parsed actionable input, retain its results in execution order. If `maxFeedback` is exceeded, evict whole oldest records; an individually oversized result is explicitly marked and capped at half the budget so later evidence can coexist.
 12. **Sleep** — `(sleep (sleepInterval))`.
 13. **Recurse** — `(omegaclaw (+ 1 $k))`.
 
 ## Idle behavior
 
-When `&loops` hits zero and no new message has arrived, the loop skips the LLM call. When `now > &nextWakeAt`, it grants `maxWakeLoops + 1` extra turns so the agent can do self-initiated work (cleanup, summarization, etc.).
+When `&loops` hits zero and no new message has arrived, the loop skips the LLM call. When `now > &nextWakeAt`, it clears evidence from the completed input and grants `maxWakeLoops + 1` extra turns so the agent can do self-initiated work (cleanup, summarization, etc.).
 
 ## Error handling
 
