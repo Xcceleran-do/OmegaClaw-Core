@@ -18,18 +18,18 @@ Initializes state:
 - `(initMemory)` — configures memory parameters and loads the embedding model.
 - `(initChannels)` — opens the active communication channel.
 
-Also creates shared state slots:
+Also initializes runtime state:
 
 - `&prevmsg` — last received human message.
-- `&lastresults` — previous turn's skill results, for the next prompt.
+- `evidence` — ordered skill-result records retained for the active input.
 - `&loops` — countdown until the agent goes idle.
 
 ## Every turn
 
 1. **Decrement `&loops`** (turns > 1 only).
-2. **Build the prompt** — `getContext` assembles `PROMPT + SKILLS + LAST_SKILL_USE_RESULTS + HISTORY + TIME` plus an output-format instruction requiring a tuple of up to 5 skill s-exprs.
-3. **Receive** — `(receive)` via the active channel.
-4. **Detect new input** — compare against `&prevmsg`. If different and non-empty, reset `&loops` to `maxNewInputLoops`.
+2. **Receive** — `(receive)` via the active channel.
+3. **Detect new input** — compare against `&prevmsg`. If different and non-empty, reset the evidence module and restore `&loops` to `maxNewInputLoops`.
+4. **Build the prompt** — after input detection, `getContext` assembles `PROMPT + SKILLS + LAST_SKILL_USE_RESULTS + HISTORY + TIME` plus an output-format instruction requiring a tuple of up to 5 skill s-exprs.
 5. **Set next wake** — `&nextWakeAt := now + wakeupInterval`.
 6. **Call the LLM** — dispatches on `provider`:
    - `OpenAI` → `useGPT`
@@ -40,7 +40,7 @@ Also creates shared state slots:
 8. **Parse** — `sread` on the repaired string; if it does not start with `(`, the loop feeds back a reminder prompt.
 9. **Dispatch skills** — `(superpose $sexpr)` runs each skill, capturing errors via `HandleError`.
 10. **Record** — `addToHistory` appends human message + response + any errors to `memory/history.metta`, provided something new happened.
-11. **Save last results** — into `&lastresults` for the next turn's prompt.
+11. **Append evidence** — retain this turn's results in execution order. If `maxFeedback` is exceeded, evict whole oldest records; explicitly mark an individually oversized result before truncating it.
 12. **Sleep** — `(sleep (sleepInterval))`.
 13. **Recurse** — `(omegaclaw (+ 1 $k))`.
 

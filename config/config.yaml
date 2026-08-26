@@ -26,7 +26,7 @@ logConfigPath: ""
 
 # Memory
 
-# Ceiling on `LAST_SKILL_USE_RESULTS` text fed back into the prompt (chars)
+# Character budget for task evidence; evict whole old records and mark oversized ones
 maxFeedback: 50000
 # Items returned by `query`
 maxRecallItems: 20
