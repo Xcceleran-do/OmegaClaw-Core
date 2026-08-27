@@ -29,8 +29,9 @@ def _stable_cache_key(provider: str, model: str, sysmsg: str) -> str:
     Stable key for requests sharing the same system-prefix family.
     Do not include the user message here.
     """
-    marker = " LAST_SKILL_USE_RESULTS: "
-    stable = sysmsg.split(marker, 1)[0].strip()
+    stable = sysmsg
+    for marker in ("LAST_SKILL_USE_RESULTS:", " LAST_SKILL_USE_RESULTS: "):
+        stable = stable.split(marker, 1)[0].strip()
     digest = hashlib.sha256(stable.encode("utf-8")).hexdigest()[:24]
     return f"{provider.lower()}:{model}:{digest}"
 

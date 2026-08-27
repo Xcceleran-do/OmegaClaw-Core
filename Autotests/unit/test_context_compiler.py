@@ -3,7 +3,7 @@
 import unittest
 
 import evidence
-from context import ContextBudgetError, ContextCompiler, ContextInput, ContextRecord, history_records
+from context import ContextCompiler, ContextInput, ContextRecord, estimate_tokens, history_records
 
 
 def words(text):
@@ -64,18 +64,20 @@ class ContextCompilerTests(unittest.TestCase):
         self.assertIn("evidence", compiled.manifest.included_record_ids)
         self.assertIn("history", compiled.manifest.omitted_record_ids)
 
-    def test_required_context_fails_closed_instead_of_being_sliced(self):
+    def test_oversized_required_record_degrades_to_an_explicit_placeholder(self):
         compiler = ContextCompiler(count_tokens=words)
         context = ContextInput(
             records=(record("oversized-task", "one two three four five six", 100, required=True),),
             task_message="one two three four five six",
             turn_message="",
-            context_window_tokens=10,
-            max_output_tokens=2,
+            context_window_tokens=34,
+            max_output_tokens=4,
         )
 
-        with self.assertRaisesRegex(ContextBudgetError, "oversized-task"):
-            compiler.compile(context)
+        compiled = compiler.compile(context)
+
+        self.assertIn("oversized-task", compiled.manifest.omitted_record_ids)
+        self.assertIn("CONTEXT_RECORD_OMITTED", compiled.request.messages[0].content)
 
     def test_history_reader_returns_complete_stable_records(self):
         content = (
@@ -114,6 +116,58 @@ class ContextCompilerTests(unittest.TestCase):
             [item.text for item in records],
             ['("2026-08-26 10:01:00" (send "complete"))'],
         )
+
+    def test_history_reader_recovers_after_unbalanced_parentheses_in_leading_fragment(self):
+        complete = "".join(
+            f'("2026-08-26 10:{index:02d}:00" "record {index}")\n'
+            for index in range(20)
+        )
+        for fragment in ("partial :( emoticon", "partial NAIROBI (Reuters"):
+            with self.subTest(fragment=fragment):
+                self.assertEqual(len(history_records(f"{fragment}\n{complete}")), 20)
+
+    def test_omitted_tool_result_leaves_an_explicit_placeholder(self):
+        context = ContextInput(
+            records=(
+                record("prompt", "rules", 100, required=True),
+                ContextRecord("tool-result-1", "TOOL_RESULT", "A" * 200, 80, False, "user"),
+            ),
+            task_message="write",
+            turn_message="write",
+            context_window_tokens=80,
+            max_output_tokens=20,
+        )
+
+        compiled = ContextCompiler().compile(context)
+
+        self.assertIn("tool-result-1", compiled.manifest.omitted_record_ids)
+        self.assertIn(
+            "[TOOL_RESULT_OMITTED id=tool-result-1 original_chars=200]",
+            compiled.request.messages[1].content,
+        )
+
+    def test_history_selection_is_a_contiguous_recent_suffix(self):
+        context = ContextInput(
+            records=(
+                record("prompt", "rules", 100, required=True),
+                ContextRecord("history-old", "HISTORY_RECORD", "old", 20, False, "user"),
+                ContextRecord("history-middle", "HISTORY_RECORD", "middle " * 100, 20, False, "user"),
+                ContextRecord("history-new", "HISTORY_RECORD", "new", 20, False, "user"),
+            ),
+            task_message="continue",
+            turn_message="continue",
+            context_window_tokens=40,
+            max_output_tokens=10,
+        )
+
+        compiled = ContextCompiler(count_tokens=words).compile(context)
+
+        self.assertIn("history-new", compiled.manifest.included_record_ids)
+        self.assertIn("history-middle", compiled.manifest.omitted_record_ids)
+        self.assertIn("history-old", compiled.manifest.omitted_record_ids)
+
+    def test_fallback_estimator_is_conservative_for_cjk(self):
+        self.assertGreaterEqual(estimate_tokens("机器人" * 10), 40)
 
     def test_evidence_records_have_task_local_stable_ids(self):
         evidence.append("first", 100)

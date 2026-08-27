@@ -2,6 +2,10 @@
 
 import unittest
 from unittest.mock import patch
+from pathlib import Path
+import importlib.util
+import sys
+import types
 
 import evidence
 import providers
@@ -165,6 +169,72 @@ class ModelContractTests(unittest.TestCase):
             )
 
         self.assertIn("write the article from source A", provider.request.messages[-1].content)
+
+    def test_loop_has_no_dead_context_assembler_and_clears_finished_task_on_wake(self):
+        loop = (Path(__file__).parents[2] / "src" / "loop.metta").read_text()
+
+        self.assertNotIn("(= (getContext)", loop)
+        self.assertIn(
+            '(progn (py-call (evidence.reset))\n'
+            '                                           (change-state! &prevmsg "")',
+            loop,
+        )
+        self.assertIn("($respi (catch (llmProviderContextChat", loop)
+
+    def test_chars_sent_trace_is_single_line_and_precedes_provider_call(self):
+        events = []
+
+        class CapturingProvider(providers.LLMProvider):
+            def complete(self, _request):
+                events.append("provider-call")
+                return ModelResponse(text="done")
+
+        def capture_log(template, *args):
+            rendered = template % args
+            if "CHARS_SENT:" in rendered:
+                events.append(rendered)
+
+        with (
+            patch.object(providers, "_llmprovider", CapturingProvider()),
+            patch.object(providers.logger, "info", side_effect=capture_log),
+        ):
+            providers.llmProviderContextChat(
+                "rules",
+                "skills",
+                "",
+                "one command",
+                "/tmp",
+                "write",
+                "write",
+                "2026-08-27 00:00:00",
+                "",
+                400,
+                50,
+                "medium",
+            )
+
+        self.assertTrue(events[0].startswith("CHARS_SENT:"))
+        self.assertEqual(len(events[0].splitlines()), 1)
+        self.assertIn("LAST_SKILL_USE_RESULTS:", events[0])
+        self.assertEqual(events[1], "provider-call")
+
+    def test_prompt_cache_key_ignores_per_turn_context(self):
+        openai_stub = types.ModuleType("openai")
+        openai_stub.OpenAI = object
+        config_stub = types.ModuleType("config")
+        config_stub.config_get_by_key = lambda _key, default=None: default
+        path = Path(__file__).parents[2] / "providers" / "lib_llm_ext.py"
+        spec = importlib.util.spec_from_file_location("lib_llm_ext_cache_test", path)
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {"openai": openai_stub, "config": config_stub}):
+            spec.loader.exec_module(module)
+
+        first = "PROMPT: rules\n\nLAST_SKILL_USE_RESULTS: [id=evidence-header]\nTIME: one"
+        second = "PROMPT: rules\n\nLAST_SKILL_USE_RESULTS: [id=evidence-header]\nTIME: two"
+        self.assertEqual(
+            module._stable_cache_key("openai", "model", first),
+            module._stable_cache_key("openai", "model", second),
+        )
 
 
 if __name__ == "__main__":

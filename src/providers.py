@@ -137,6 +137,8 @@ def llmProviderContextChat(
     _last_request = compiled.request
     _last_manifest = compiled.manifest.as_dict()
     logger.info("[CONTEXT_MANIFEST] %s", json.dumps(_last_manifest, separators=(",", ":")))
+    debug = compiled.request.to_legacy_prompt()
+    logger.info("CHARS_SENT: %s %s", len(debug), json.dumps(debug, ensure_ascii=False))
     return llmProviderComplete(compiled.request).text
 
 def llmProviderLastRequestChars():

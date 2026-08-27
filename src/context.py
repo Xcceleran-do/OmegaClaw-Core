@@ -10,7 +10,17 @@ from model import ModelMessage, ModelRequest, ModelRole
 
 
 TokenCounter = Callable[[str], int]
-_HISTORY_RECORD = re.compile(r'^\("\d{4}-\d{2}-\d{2} ')
+_HISTORY_RECORD = re.compile(r'^\("\d{4}-\d{2}-\d{2} ', re.MULTILINE)
+_LEGACY_SECTION_KINDS = {
+    "PROMPT",
+    "SKILLS",
+    "PROMPT_EXTENSIONS",
+    "OUTPUT_FORMAT",
+    "SAVE_PERMANENT_FILES_DIR",
+    "LAST_SKILL_USE_RESULTS",
+    "HISTORY",
+    "TIME",
+}
 
 
 class ContextBudgetError(ValueError):
@@ -27,7 +37,19 @@ class ContextRecord:
     message_role: ModelRole = "system"
 
     def render(self) -> str:
+        if self.kind in _LEGACY_SECTION_KINDS:
+            return f"{self.kind}: [id={self.id}]\n{self.text.strip()}"
         return f"[{self.kind} id={self.id}]\n{self.text.strip()}"
+
+    def omitted_render(self) -> str | None:
+        if self.kind == "TOOL_RESULT":
+            return f"[TOOL_RESULT_OMITTED id={self.id} original_chars={len(self.text)}]"
+        if self.required:
+            return (
+                f"[CONTEXT_RECORD_OMITTED id={self.id} kind={self.kind} "
+                f"original_chars={len(self.text)}]"
+            )
+        return None
 
 
 @dataclass(frozen=True)
@@ -76,25 +98,36 @@ class ContextCompiler:
             )
 
         indexed = list(enumerate(context.records))
-        selected = {index for index, record in indexed if record.required}
-        required_messages = self._messages(context, selected)
-        required_tokens = self._count_messages(required_messages)
-        if required_tokens > budget:
-            required_ids = [record.id for record in context.records if record.required]
+        selected: set[int] = set()
+        placeholder_tokens = self._count_messages(self._messages(context, selected))
+        if placeholder_tokens > budget:
             raise ContextBudgetError(
-                f"Required context needs {required_tokens} tokens but budget is {budget}; "
-                f"record_ids={required_ids}"
+                f"Task and omission markers need {placeholder_tokens} tokens but budget is {budget}"
             )
+
+        required = sorted(
+            ((index, record) for index, record in indexed if record.required),
+            key=lambda item: (-item[1].priority, item[0]),
+        )
+        for index, _record in required:
+            candidate = selected | {index}
+            if self._count_messages(self._messages(context, candidate)) <= budget:
+                selected = candidate
 
         optional = sorted(
             ((index, record) for index, record in indexed if not record.required),
             key=lambda item: (item[1].priority, item[0]),
             reverse=True,
         )
-        for index, _record in optional:
+        history_blocked = False
+        for index, record in optional:
+            if record.kind == "HISTORY_RECORD" and history_blocked:
+                continue
             candidate = selected | {index}
             if self._count_messages(self._messages(context, candidate)) <= budget:
                 selected = candidate
+            elif record.kind == "HISTORY_RECORD":
+                history_blocked = True
 
         messages = self._messages(context, selected)
         estimated_tokens = self._count_messages(messages)
@@ -116,14 +149,14 @@ class ContextCompiler:
 
     def _messages(self, context: ContextInput, selected: set[int]) -> tuple[ModelMessage, ...]:
         system = "\n\n".join(
-            record.render()
+            self._render_record(record, index in selected)
             for index, record in enumerate(context.records)
-            if index in selected and record.message_role == "system"
+            if record.message_role == "system" and self._render_record(record, index in selected)
         )
         user_context = "\n\n".join(
-            record.render()
+            self._render_record(record, index in selected)
             for index, record in enumerate(context.records)
-            if index in selected and record.message_role == "user"
+            if record.message_role == "user" and self._render_record(record, index in selected)
         )
         active_task = _active_user_message(context.task_message, context.turn_message)
         user = f"{user_context}\n\n[ACTIVE_TASK]\n{active_task}" if user_context else active_task
@@ -131,6 +164,10 @@ class ContextCompiler:
             ModelMessage("system", system),
             ModelMessage("user", user),
         )
+
+    @staticmethod
+    def _render_record(record: ContextRecord, selected: bool) -> str | None:
+        return record.render() if selected else record.omitted_render()
 
     def _count_messages(self, messages: tuple[ModelMessage, ...]) -> int:
         # Four tokens per message and two for assistant priming are the common
@@ -142,14 +179,19 @@ def estimate_tokens(text: str) -> int:
     """Portable fallback when a provider has no tokenizer implementation."""
     if not text:
         return 0
-    return max(1, math.ceil(len(text.encode("utf-8")) / 3))
+    ascii_chars = sum(1 for char in text if ord(char) < 128)
+    non_ascii_tokens = sum(
+        max(2, len(char.encode("utf-8")) - 1)
+        for char in text
+        if ord(char) >= 128
+    )
+    return max(1, math.ceil(ascii_chars / 3) + non_ascii_tokens)
 
 
 def history_records(content: str) -> tuple[ContextRecord, ...]:
     """Parse complete records from the bounded history text supplied by MeTTa."""
     records = []
-    complete = (text for text in _top_level_expressions(content) if _HISTORY_RECORD.match(text))
-    for index, text in enumerate(complete, start=1):
+    for index, text in enumerate(_top_level_expressions(content), start=1):
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         records.append(
             ContextRecord(
@@ -177,20 +219,25 @@ def _active_user_message(task_message: str, turn_message: str) -> str:
 
 
 def _top_level_expressions(content: str) -> tuple[str, ...]:
-    """Split MeTTa history into complete top-level expressions."""
+    """Read expressions from timestamped record starts in a raw history tail."""
     records = []
-    start = None
+    consumed_until = 0
+    for match in _HISTORY_RECORD.finditer(content):
+        if match.start() < consumed_until:
+            continue
+        expression, consumed_until = _expression_at(content, match.start())
+        if expression is not None:
+            records.append(expression)
+
+    return tuple(records)
+
+
+def _expression_at(content: str, start: int) -> tuple[str | None, int]:
     depth = 0
     in_string = False
     escaped = False
-
-    for index, char in enumerate(content):
-        if start is None:
-            if char == "(":
-                start = index
-                depth = 1
-            continue
-
+    for index in range(start, len(content)):
+        char = content[index]
         if in_string:
             if escaped:
                 escaped = False
@@ -199,7 +246,6 @@ def _top_level_expressions(content: str) -> tuple[str, ...]:
             elif char == '"':
                 in_string = False
             continue
-
         if char == '"':
             in_string = True
         elif char == "(":
@@ -207,10 +253,9 @@ def _top_level_expressions(content: str) -> tuple[str, ...]:
         elif char == ")":
             depth -= 1
             if depth == 0:
-                records.append(content[start:index + 1].strip())
-                start = None
-
-    return tuple(records)
+                end = index + 1
+                return content[start:end].strip(), end
+    return None, start + 1
 
 
 def loop_context_records(

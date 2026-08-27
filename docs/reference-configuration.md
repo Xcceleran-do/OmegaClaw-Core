@@ -20,7 +20,7 @@ This reads a command-line override via `argk` (`name=value` on the MeTTa command
 | `LLM` | `gpt-5.4` | Model identifier passed to the provider. |
 | `provider` | `Anthropic` | LLM provider — `Anthropic`, `OpenAI`, `ASICloud`, or `ASIOne`. |
 | `maxOutputToken` | 6000 | Output cap passed to the provider. |
-| `contextWindowTokens` | 32768 | Total model context window. The compiler reserves `maxOutputToken` and selects only whole input records within the remainder. Set this to the selected model's actual context window. |
+| `contextWindowTokens` | 32768 | Total model context window. The compiler reserves `maxOutputToken`, preserves whole selected records, and marks omissions within the remainder. Set this to the selected model's actual context window. Providers may supply an exact tokenizer; the fallback deliberately overestimates non-ASCII text. |
 | `reasoningMode` | `medium` | Reasoning-effort hint passed to the provider. |
 | `wakeupInterval` | 600 (seconds) | How long idle before the next scheduled wake-up. |
 
