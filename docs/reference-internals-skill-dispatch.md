@@ -23,7 +23,7 @@ From `src/loop.metta`:
 5. **Fan out** — `(superpose $sexpr)` produces one binding per skill call in the tuple.
 6. **Evaluate each** — `(catch (eval $s))`. On success, the result is normalized via `helper.normalize_string`. On failure, `HandleError` records `SINGLE_COMMAND_FORMAT_ERROR_...`.
 7. **Aggregate** — all results are collapsed into `RESULTS: ((COMMAND_RETURN: (cmd result)) ...)`.
-8. **Feedback** — appended to the active input's evidence records and fed back as `LAST_SKILL_USE_RESULTS` on later turns. The `maxFeedback` budget evicts whole oldest records first.
+8. **Feedback** — appended to task-local evidence and fed back as `LAST_SKILL_USE_RESULTS` on later turns. The context compiler selects complete records within its token budget; hidden records remain exactly addressable until task reset.
 
 ## How `eval $s` resolves to a skill
 

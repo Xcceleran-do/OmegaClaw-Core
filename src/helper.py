@@ -22,6 +22,7 @@ STATIC_LLM_COMMANDS = {
     "pin",
     "query",
     "read-file",
+    "recall",
     "remember",
     "search",
     "send",

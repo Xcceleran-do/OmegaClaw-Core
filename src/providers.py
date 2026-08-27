@@ -167,6 +167,7 @@ def llmProviderContextChat(
         current_time=str(current_time),
         evidence_records=evidence.records(),
         history=str(history),
+        evidence_sources=evidence.sources(),
     )
     try:
         compiled = ContextCompiler(_llmprovider.count_tokens).compile(
