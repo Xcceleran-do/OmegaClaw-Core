@@ -428,7 +428,9 @@ def _parse_source_payload(
         content = content[line_end + 1 :].lstrip() if line_end >= 0 else ""
 
     starts = list(_BATCH_SOURCE.finditer(content))
-    if starts:
+    # A batch marker is control syntax only immediately after the warning.
+    # Marker-shaped lines later in a single page belong to its untrusted body.
+    if starts and starts[0].start() == 0:
         expected_total = int(starts[0].group(2))
         valid_headers = (
             len(starts) == expected_total
