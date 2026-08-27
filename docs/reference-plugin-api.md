@@ -115,13 +115,15 @@ Each plugin can register more than one LLM provider. Each LLM provider must
 have an unique id which is used as the value of the `provider` configuration
 parameter in order to enable the provider.
 
-In order to implement a new LLM provider integration one should provide
-implementation of the single function `chat`. The function takes three
-parameters:
-- `prompt` - the string which is sent to LLM by agent as a prompt, required
-- `max_tokens` - the maximum number of tokens can be used by provider to answer the
-  prompt, default value is 6000
-- `reasoning_mode` - the reasoning mode of the LLM, default value is "medium"
+New LLM integrations should implement `complete(request)`. `ModelRequest`
+preserves role-separated messages, output limits, reasoning mode, optional tool
+schemas, response schema, and request metadata. `ModelResponse` preserves text,
+structured tool calls, usage/cache tokens, finish reason, and reasoning
+metadata.
+
+Plugins that only implement the legacy
+`chat(prompt, max_tokens, reasoning_mode) -> str` interface continue to work
+through a compatibility adapter at the provider seam.
 
 LLM provider integration should be implemented as a Python class. Inherit the
 class from `providers.LLMProvider` and implement at least one method of the
@@ -129,6 +131,7 @@ ancestor.
 
 ```python
 import providers
+from model import ModelRequest, ModelResponse
 
 class ExampleLLMProvider(providers.LLMProvider):
 
@@ -138,8 +141,8 @@ class ExampleLLMProvider(providers.LLMProvider):
     def stop(self) -> None:
         print("ExampleLLMProvider is stopped")
 
-    def chat(self, prompt: str, max_tokens: int = 6000, reasoning_mode: str = "medium") -> str:
-        return "LLM answer example" 
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        return ModelResponse(text="LLM answer example", finish_reason="stop")
 ```
 
 In order to be able to use this LLM provider integration the plugin code should

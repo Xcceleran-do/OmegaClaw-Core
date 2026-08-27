@@ -29,13 +29,9 @@ Also initializes runtime state:
 1. **Decrement `&loops`** (turns > 1 only).
 2. **Receive** — `(receive)` via the active channel.
 3. **Detect new input** — compare against `&prevmsg`. If different and non-empty, reset the evidence module and restore `&loops` to `maxNewInputLoops`.
-4. **Build the prompt** — after input detection, `getContext` assembles `PROMPT + SKILLS + LAST_SKILL_USE_RESULTS + HISTORY + TIME` plus an output-format instruction requiring a tuple of up to 5 skill s-exprs.
+4. **Compile model context** — after input detection, `ContextCompiler` ranks stable instructions, task evidence, and complete history records; reserves `maxOutputToken`; and emits included/omitted record IDs. Omitted tool results and degraded required records leave explicit placeholders. History is selected as a contiguous recent suffix. The compiler produces a typed request with trusted instructions in `system` and task/evidence/history data in `user`.
 5. **Set next wake** — `&nextWakeAt := now + wakeupInterval`.
-6. **Call the LLM** — dispatches on `provider`:
-   - `OpenAI` → `useGPT`
-   - `Anthropic` → `lib_llm_ext.useClaude`
-   - `ASICloud` → `lib_llm_ext.useMiniMax`
-   - else → `lib_llm_ext.useAsi1`
+6. **Call the LLM** — emit the single-line `CHARS_SENT` trace, then dispatch the typed `ModelRequest` through the selected provider adapter and retain typed usage, finish-reason, reasoning, and tool-call metadata in `ModelResponse`. Context compilation is caught at the loop boundary so an impossible budget cannot terminate the process.
 7. **Repair parentheses** — `helper.balance_parentheses` fixes common mismatches before parsing.
 8. **Parse** — `sread` on the repaired string; if it does not start with `(`, the loop feeds back a reminder prompt.
 9. **Dispatch skills** — `(superpose $sexpr)` runs each skill, capturing errors via `HandleError`.
@@ -46,7 +42,7 @@ Also initializes runtime state:
 
 ## Idle behavior
 
-When `&loops` hits zero and no new message has arrived, the loop skips the LLM call. When `now > &nextWakeAt`, it clears evidence from the completed input and grants `maxWakeLoops + 1` extra turns so the agent can do self-initiated work (cleanup, summarization, etc.).
+When `&loops` hits zero and no new message has arrived, the loop skips the LLM call. When `now > &nextWakeAt`, it clears both task evidence and the completed input before granting `maxWakeLoops + 1` extra turns for self-initiated work (cleanup, summarization, etc.).
 
 ## Error handling
 

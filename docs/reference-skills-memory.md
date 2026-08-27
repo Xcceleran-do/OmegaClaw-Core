@@ -113,5 +113,5 @@ Success / failure of the append.
 ```
 
 ### Notes / Limits
-- `pin` is not semantically indexed — it only influences the next few turns through the rolling `HISTORY` window (`maxHistory` characters).
+- `pin` is not semantically indexed — it influences later turns while its complete history record fits the context compiler's token budget.
 - For anything you want to recall days later, use `remember` instead.

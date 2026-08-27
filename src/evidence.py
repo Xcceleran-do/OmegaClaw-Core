@@ -1,16 +1,28 @@
 """Task-scoped tool evidence retained across agent turns."""
 
+from dataclasses import dataclass
 
-_records = []
+
+@dataclass(frozen=True)
+class EvidenceRecord:
+    id: str
+    text: str
+
+
+_records: list[EvidenceRecord] = []
+_next_id = 1
 
 
 def reset():
     """Start a new task with no evidence."""
+    global _next_id
     _records.clear()
+    _next_id = 1
 
 
 def append(record, max_chars):
     """Append one result and evict only whole older records."""
+    global _next_id
     limit = int(max_chars)
     if limit <= 0:
         reset()
@@ -29,7 +41,8 @@ def append(record, max_chars):
             excerpt = text[:head] + (text[-tail:] if tail else "")
             text = f"{marker}\n{excerpt}"
 
-    _records.append(text)
+    _records.append(EvidenceRecord(id=f"tool-result-{_next_id}", text=text))
+    _next_id += 1
     while len(render()) > limit and len(_records) > 1:
         _records.pop(0)
     return render()
@@ -37,4 +50,9 @@ def append(record, max_chars):
 
 def render():
     """Render retained records in execution order."""
-    return "\n".join(_records)
+    return "\n".join(record.text for record in _records)
+
+
+def records():
+    """Return an immutable snapshot for context selection."""
+    return tuple(_records)
