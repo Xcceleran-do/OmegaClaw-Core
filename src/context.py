@@ -63,18 +63,53 @@ class ContextInput:
 
 
 @dataclass(frozen=True)
+class ContextSize:
+    count: int
+    chars: int
+    tokens: int
+
+    def as_dict(self) -> dict[str, int]:
+        return {"count": self.count, "chars": self.chars, "tokens": self.tokens}
+
+
+@dataclass(frozen=True)
 class ContextManifest:
+    context_window_tokens: int
+    max_output_tokens: int
     input_token_budget: int
     estimated_input_tokens: int
     included_record_ids: tuple[str, ...]
     omitted_record_ids: tuple[str, ...]
+    candidate_records: ContextSize
+    included_records: ContextSize
+    omitted_records: ContextSize
+    candidate_tool_results: ContextSize
+    included_tool_results: ContextSize
+    omitted_tool_results: ContextSize
+    rendered_tool_results: ContextSize
 
     def as_dict(self) -> dict[str, object]:
         return {
+            "context_window_tokens": self.context_window_tokens,
+            "max_output_tokens": self.max_output_tokens,
             "input_token_budget": self.input_token_budget,
             "estimated_input_tokens": self.estimated_input_tokens,
+            "input_budget_utilization": round(
+                self.estimated_input_tokens / self.input_token_budget, 4
+            ),
             "included_record_ids": list(self.included_record_ids),
             "omitted_record_ids": list(self.omitted_record_ids),
+            "records": {
+                "candidate": self.candidate_records.as_dict(),
+                "included": self.included_records.as_dict(),
+                "omitted": self.omitted_records.as_dict(),
+            },
+            "tool_results": {
+                "candidate": self.candidate_tool_results.as_dict(),
+                "included": self.included_tool_results.as_dict(),
+                "omitted": self.omitted_tool_results.as_dict(),
+                "rendered": self.rendered_tool_results.as_dict(),
+            },
         }
 
 
@@ -91,11 +126,9 @@ class ContextCompiler:
         self._count_tokens = count_tokens or estimate_tokens
 
     def compile(self, context: ContextInput) -> CompiledContext:
-        budget = int(context.context_window_tokens) - int(context.max_output_tokens)
-        if budget <= 0:
-            raise ContextBudgetError(
-                "context_window_tokens must be greater than max_output_tokens"
-            )
+        context_window_tokens = int(context.context_window_tokens)
+        max_output_tokens = int(context.max_output_tokens)
+        budget = validate_context_budget(context_window_tokens, max_output_tokens)
 
         indexed = list(enumerate(context.records))
         selected: set[int] = set()
@@ -133,11 +166,36 @@ class ContextCompiler:
         estimated_tokens = self._count_messages(messages)
         included = tuple(record.id for index, record in indexed if index in selected)
         omitted = tuple(record.id for index, record in indexed if index not in selected)
+        included_records = tuple(record for index, record in indexed if index in selected)
+        omitted_records = tuple(record for index, record in indexed if index not in selected)
+        tool_results = tuple(record for record in context.records if record.kind == "TOOL_RESULT")
+        included_tool_results = tuple(
+            record for index, record in indexed if index in selected and record.kind == "TOOL_RESULT"
+        )
+        omitted_tool_results = tuple(
+            record for index, record in indexed if index not in selected and record.kind == "TOOL_RESULT"
+        )
+        rendered_tool_results = tuple(
+            rendered
+            for index, record in indexed
+            if record.kind == "TOOL_RESULT"
+            for rendered in (self._render_record(record, index in selected),)
+            if rendered
+        )
         manifest = ContextManifest(
+            context_window_tokens=context_window_tokens,
+            max_output_tokens=max_output_tokens,
             input_token_budget=budget,
             estimated_input_tokens=estimated_tokens,
             included_record_ids=included,
             omitted_record_ids=omitted,
+            candidate_records=self._measure(record.text for record in context.records),
+            included_records=self._measure(record.text for record in included_records),
+            omitted_records=self._measure(record.text for record in omitted_records),
+            candidate_tool_results=self._measure(record.text for record in tool_results),
+            included_tool_results=self._measure(record.text for record in included_tool_results),
+            omitted_tool_results=self._measure(record.text for record in omitted_tool_results),
+            rendered_tool_results=self._measure(rendered_tool_results),
         )
         request = ModelRequest(
             messages=messages,
@@ -173,6 +231,29 @@ class ContextCompiler:
         # Four tokens per message and two for assistant priming are the common
         # chat framing estimate. Provider adapters can inject an exact counter.
         return 2 + sum(4 + max(0, int(self._count_tokens(message.content))) for message in messages)
+
+    def _measure(self, texts: Iterable[str]) -> ContextSize:
+        values = tuple(texts)
+        return ContextSize(
+            count=len(values),
+            chars=sum(len(value) for value in values),
+            tokens=sum(max(0, int(self._count_tokens(value))) for value in values),
+        )
+
+
+def validate_context_budget(context_window_tokens: int, max_output_tokens: int) -> int:
+    """Validate configured reserves and return the available input budget."""
+    window = int(context_window_tokens)
+    output = int(max_output_tokens)
+    if window <= 0:
+        raise ContextBudgetError("context_window_tokens must be positive")
+    if output <= 0:
+        raise ContextBudgetError("max_output_tokens must be positive")
+    if output >= window:
+        raise ContextBudgetError(
+            "context_window_tokens must be greater than max_output_tokens"
+        )
+    return window - output
 
 
 def estimate_tokens(text: str) -> int:
