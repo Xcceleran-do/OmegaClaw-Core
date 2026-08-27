@@ -137,7 +137,11 @@ Each appended block contains:
 - The LLM's response s-expression.
 - `ERROR_FEEDBACK:` when the loop captured an error.
 
-The trailing `maxHistory` characters are loaded back into the prompt as `HISTORY` context. `(episodes ts)` reads lines around a timestamp.
+The context compiler parses complete top-level records from the bounded
+`maxHistory` tail, ranks them below active-task evidence, and includes only
+records that fit the model's input-token budget. A leading partial record is
+discarded, and the manifest identifies omitted record IDs. `(episodes ts)`
+reads lines around a timestamp.
 
 The episodic trace is not a separate "tier" in the same sense — it is the running log that makes the short-horizon loop work. `pin` writes into it; `remember` writes around it.
 

@@ -64,7 +64,8 @@ From `src/memory.metta`:
 
 - `maxRecallItems` — how many items `query` returns (default 20).
 - `maxEpisodeRecallLines` — how many lines `episodes` returns (default 20).
-- `maxHistory` — characters of history fed back into the prompt (default 30000).
+- `contextWindowTokens` — total model window; the compiler reserves output tokens and fits complete history records into the remainder.
+- `maxHistory` — bounded history candidate tail; only complete records can enter compiled context.
 - `embeddingprovider` — `OpenAI` or `Local`.
 
 Change any of these by editing the `configure` calls in `initMemory` or passing command-line overrides — see [reference-configuration.md](./reference-configuration.md).

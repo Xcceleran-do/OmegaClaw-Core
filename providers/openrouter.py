@@ -5,6 +5,7 @@ import lib_llm_ext as llm
 import providers
 from src.logger import get_logger
 from config import config_get_by_key
+from model import ModelRequest, ModelResponse
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,9 @@ class OpenRouterProvider(providers.LLMProvider):
 
     def chat(self, prompt: str, max_tokens: int = 6000, reasoning_mode: str = "medium") -> str:
         return self.delegate.chat(prompt, max_tokens, reasoning_mode)
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        return self.delegate.complete(request)
 
 def loadOmegaClawPlugin():
     providers.registerLLMProvider("OpenRouter", OpenRouterProvider())
@@ -46,12 +50,16 @@ class OpenRouterProviderImpl(llm.AIProvider):
 
         return None
 
-    def _openrouter_extra_body(self, content: str, max_tokens: int) -> Dict[str, Any]:
-        sysmsg, _ = llm._split_system_user(content)
+    def _openrouter_extra_body(self, request: ModelRequest) -> Dict[str, Any]:
+        sysmsg = "\n\n".join(
+            message.text_content(strict=True)
+            for message in request.messages
+            if message.role == "system"
+        )
         body = {
             "reasoning": {
                 "enabled": True,
-                "max_tokens": max_tokens,
+                "max_tokens": request.max_output_tokens,
                 "exclude": True,
             }
         }
@@ -77,16 +85,14 @@ class OpenRouterProviderImpl(llm.AIProvider):
         return body
 
 
-    def chat(self, content: str, max_tokens: int = 6000, reasoning: str = "medium", **kwargs) -> str:
+    def complete(self, request: ModelRequest, **kwargs) -> ModelResponse:
         extra_body = llm._merge_dicts(
-            self._openrouter_extra_body(content, max_tokens),
+            self._openrouter_extra_body(request),
             kwargs.pop("extra_body", None),
         )
 
-        return super().chat(
-            content=content,
-            max_tokens=max_tokens,
-            reasoning=reasoning,
+        return super().complete(
+            request,
             extra_body=extra_body,
             **kwargs,
         )

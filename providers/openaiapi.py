@@ -2,6 +2,7 @@ import os
 import lib_llm_ext as llm
 import providers
 from config import config_get_by_key
+from model import ModelRequest, ModelResponse
 
 class OpenAIAPI(providers.LLMProvider):
 
@@ -28,6 +29,9 @@ class OpenAIAPI(providers.LLMProvider):
 
     def chat(self, prompt: str, max_tokens: int = 6000, reasoning_mode: str = "medium") -> str:
         return self.delegate.chat(prompt, max_tokens, reasoning_mode)
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        return self.delegate.complete(request)
 
 
 class OpenAIAPIPreconfigured(OpenAIAPI):
