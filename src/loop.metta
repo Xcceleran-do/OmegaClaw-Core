@@ -57,6 +57,8 @@
    (progn (if (== $k 1) (progn (initConfig)
                                (initLoop)
                                (initLogger)
+                               (py-call (providers.llmProviderValidateContextBudget
+                                  (contextWindowTokens) (maxOutputToken) (maxNewInputLoops)))
                                (applySecurityPolicy)
                                (initMemory)
                                (initKnowledge)

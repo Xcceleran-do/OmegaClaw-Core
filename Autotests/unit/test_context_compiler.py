@@ -3,7 +3,15 @@
 import unittest
 
 import evidence
-from context import ContextCompiler, ContextInput, ContextRecord, estimate_tokens, history_records
+from context import (
+    ContextBudgetError,
+    ContextCompiler,
+    ContextInput,
+    ContextRecord,
+    estimate_tokens,
+    history_records,
+    validate_context_budget,
+)
 
 
 def words(text):
@@ -36,8 +44,13 @@ class ContextCompilerTests(unittest.TestCase):
         compiled = compiler.compile(context)
 
         self.assertEqual(compiled.manifest.input_token_budget, 23)
+        self.assertEqual(compiled.manifest.context_window_tokens, 31)
+        self.assertEqual(compiled.manifest.max_output_tokens, 8)
         self.assertEqual(compiled.manifest.included_record_ids, ("task-facts", "evidence-b"))
         self.assertEqual(compiled.manifest.omitted_record_ids, ("evidence-a", "history-a"))
+        self.assertEqual(compiled.manifest.candidate_records.count, 4)
+        self.assertEqual(compiled.manifest.included_records.count, 2)
+        self.assertEqual(compiled.manifest.omitted_records.count, 2)
         system = compiled.request.messages[0].content
         user = compiled.request.messages[1].content
         self.assertNotIn("beta evidence complete", system)
@@ -145,6 +158,17 @@ class ContextCompilerTests(unittest.TestCase):
             "[TOOL_RESULT_OMITTED id=tool-result-1 original_chars=200]",
             compiled.request.messages[1].content,
         )
+        manifest = compiled.manifest.as_dict()
+        self.assertEqual(manifest["tool_results"]["candidate"]["chars"], 200)
+        self.assertEqual(manifest["tool_results"]["omitted"]["chars"], 200)
+        self.assertLess(manifest["tool_results"]["rendered"]["chars"], 200)
+
+    def test_context_budget_validation_rejects_impossible_allocations(self):
+        self.assertEqual(validate_context_budget(100, 40), 60)
+        for window, output in ((0, 10), (100, 0), (100, 100), (100, 101)):
+            with self.subTest(window=window, output=output):
+                with self.assertRaises(ContextBudgetError):
+                    validate_context_budget(window, output)
 
     def test_history_selection_is_a_contiguous_recent_suffix(self):
         context = ContextInput(

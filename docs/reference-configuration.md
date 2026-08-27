@@ -79,3 +79,9 @@ metta run.metta commchannel=websocket WS_URL=wss://chat.example.com/agent WS_TOK
 ```
 
 The `argk` helper parses `key=value` pairs from `argv`.
+
+At startup OmegaClaw validates that `contextWindowTokens` and
+`maxOutputToken` are positive and that the output reserve is smaller than the
+total window. The resolved allocation and `maxNewInputLoops` ceiling are
+logged as `CONTEXT_BUDGET`; an impossible allocation stops startup before the
+first provider request.

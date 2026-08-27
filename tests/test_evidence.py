@@ -22,6 +22,13 @@ class EvidenceTests(unittest.TestCase):
         evidence.append("cccc", 9)
 
         self.assertEqual(evidence.render(), "bbbb\ncccc")
+        stats = evidence.stats()
+        self.assertEqual(stats.appended_records, 3)
+        self.assertEqual(stats.appended_chars, 12)
+        self.assertEqual(stats.retained_records, 2)
+        self.assertEqual(stats.retained_chars, 8)
+        self.assertEqual(stats.evicted_records, 1)
+        self.assertEqual(stats.evicted_chars, 4)
 
     def test_tiny_budget_truncates_the_marker_to_reserved_space(self):
         rendered = evidence.append("abcdefghijklmnopqrstuvwxyz", 24)
@@ -37,10 +44,24 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(rendered.startswith("[TOOL_RESULT_TRUNCATED"))
         self.assertIn("source", rendered)
         self.assertTrue(rendered.endswith("tail"))
+        stats = evidence.stats()
+        self.assertEqual(stats.truncated_records, 1)
+        self.assertEqual(stats.truncated_chars, len(oversized) - len(rendered))
 
         evidence.append("next-result", 200)
         self.assertIn("TOOL_RESULT_TRUNCATED", evidence.render())
         self.assertTrue(evidence.render().endswith("next-result"))
+
+    def test_reset_starts_new_telemetry_generation(self):
+        first_generation = evidence.stats().task_generation
+        evidence.append("old", 100)
+
+        evidence.reset()
+
+        stats = evidence.stats()
+        self.assertEqual(stats.task_generation, first_generation + 1)
+        self.assertEqual(stats.appended_records, 0)
+        self.assertEqual(stats.retained_records, 0)
 
 
 if __name__ == "__main__":

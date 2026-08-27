@@ -29,7 +29,7 @@ Also initializes runtime state:
 1. **Decrement `&loops`** (turns > 1 only).
 2. **Receive** — `(receive)` via the active channel.
 3. **Detect new input** — compare against `&prevmsg`. If different and non-empty, reset the evidence module and restore `&loops` to `maxNewInputLoops`.
-4. **Compile model context** — after input detection, `ContextCompiler` ranks stable instructions, task evidence, and complete history records; reserves `maxOutputToken`; and emits included/omitted record IDs. Omitted tool results and degraded required records leave explicit placeholders. History is selected as a contiguous recent suffix. The compiler produces a typed request with trusted instructions in `system` and task/evidence/history data in `user`.
+4. **Compile model context** — after input detection, `ContextCompiler` ranks stable instructions, task evidence, and complete history records; reserves `maxOutputToken`; and emits included/omitted record IDs plus candidate, rendered, and omitted size measurements. Omitted tool results and degraded required records leave explicit placeholders. History is selected as a contiguous recent suffix. The compiler produces a typed request with trusted instructions in `system` and task/evidence/history data in `user`.
 5. **Set next wake** — `&nextWakeAt := now + wakeupInterval`.
 6. **Call the LLM** — emit the single-line `CHARS_SENT` trace, then dispatch the typed `ModelRequest` through the selected provider adapter and retain typed usage, finish-reason, reasoning, and tool-call metadata in `ModelResponse`. Context compilation is caught at the loop boundary so an impossible budget cannot terminate the process.
 7. **Repair parentheses** — `helper.balance_parentheses` fixes common mismatches before parsing.
@@ -52,6 +52,22 @@ Two kinds of error are reported back into `&error`:
 - **Per-skill failure** (`SINGLE_COMMAND_FORMAT_ERROR_...`) — one skill call failed.
 
 Errors are appended to the episodic trace so the agent sees them and can self-correct.
+
+## Baseline telemetry
+
+Each provider interaction emits a single-line `TASK_TELEMETRY` JSON object.
+`task_generation` changes whenever evidence is reset, while `interaction`
+counts model calls within that generation. The payload contains:
+
+- current, appended, evicted, and truncated evidence characters and records;
+- candidate, included, omitted, and rendered context sizes in characters and
+  estimated tokens;
+- the resolved context window, output reserve, input budget, and utilization.
+
+`CONTEXT_BUDGET_PRESSURE` is logged when estimated input reaches 90% of the
+available input budget. `CHANNEL_SEND` records whether the selected channel
+adapter accepted or raised while dispatching a message; it does not claim
+downstream delivery by asynchronous channel infrastructure.
 
 ## See also
 

@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 import importlib.util
+import json
 import sys
 import types
 
@@ -144,6 +145,41 @@ class ModelContractTests(unittest.TestCase):
         manifest = provider.request.metadata["context_manifest"]
         self.assertIn("tool-result-1", manifest["included_record_ids"])
         self.assertIn("tool-result-2", manifest["included_record_ids"])
+        telemetry = json.loads(providers.llmProviderLastTaskTelemetry())
+        self.assertEqual(telemetry["interaction"], 1)
+        self.assertEqual(telemetry["evidence"]["retained_records"], 2)
+        self.assertEqual(telemetry["context"]["tool_results"]["candidate"]["count"], 2)
+
+    def test_task_interaction_counter_resets_with_evidence(self):
+        class CapturingProvider(providers.LLMProvider):
+            def complete(self, _request):
+                return ModelResponse(text="done")
+
+        def run_once():
+            with patch.object(providers, "_llmprovider", CapturingProvider()):
+                providers.llmProviderContextChat(
+                    "rules", "skills", "", "one command", "/tmp", "task", "task",
+                    "2026-08-27 00:00:00", "", 400, 50, "medium",
+                )
+            return json.loads(providers.llmProviderLastTaskTelemetry())
+
+        first = run_once()
+        second = run_once()
+        evidence.reset()
+        after_reset = run_once()
+
+        self.assertEqual(first["interaction"], 1)
+        self.assertEqual(second["interaction"], 2)
+        self.assertEqual(after_reset["interaction"], 1)
+        self.assertNotEqual(first["task_generation"], after_reset["task_generation"])
+
+    def test_startup_budget_validation_logs_resolved_allocation(self):
+        with patch.object(providers.logger, "info") as info:
+            budget = providers.llmProviderValidateContextBudget(32768, 6000, 50)
+
+        self.assertEqual(budget, 26768)
+        self.assertIn("[CONTEXT_BUDGET]", info.call_args.args[0])
+        self.assertIn('"max_new_input_loops":50', info.call_args.args[1])
 
     def test_continuation_keeps_current_task_in_required_user_message(self):
         class CapturingProvider(providers.LLMProvider):
@@ -180,6 +216,10 @@ class ModelContractTests(unittest.TestCase):
             loop,
         )
         self.assertIn("($respi (catch (llmProviderContextChat", loop)
+        self.assertLess(
+            loop.index("(initLogger)"),
+            loop.index("providers.llmProviderValidateContextBudget"),
+        )
 
     def test_chars_sent_trace_is_single_line_and_precedes_provider_call(self):
         events = []

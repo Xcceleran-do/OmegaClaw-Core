@@ -56,4 +56,9 @@ def commChannelReceive():
 def commChannelSend(message):
     """Send message via selected communication channel"""
     global _commchannel
-    _commchannel.send(message)
+    try:
+        _commchannel.send(message)
+    except Exception:
+        logger.exception("[CHANNEL_SEND] dispatch_succeeded=false chars=%s", len(str(message)))
+        raise
+    logger.info("[CHANNEL_SEND] dispatch_succeeded=true chars=%s", len(str(message)))
