@@ -60,6 +60,8 @@ Each provider interaction emits a single-line `TASK_TELEMETRY` JSON object.
 counts model calls within that generation. The payload contains:
 
 - current and appended evidence characters and records, including source/chunk counts;
+- source-marker mismatches (a `Title:`/`URL:` payload without the expected
+  stable `Untrusted web content follows` prefix);
 - recall calls, requested IDs, exact hits, and misses;
 - candidate, included, omitted, and rendered context sizes in characters and
   estimated tokens;
@@ -69,6 +71,14 @@ counts model calls within that generation. The payload contains:
 available input budget. `CHANNEL_SEND` records whether the selected channel
 adapter accepted or raised while dispatching a message; it does not claim
 downstream delivery by asynchronous channel infrastructure.
+
+For the current Mindplex gateway, `deep_pull` exposes at most 12,000
+characters per returned page, up to five pages per call, and defaults to three
+calls per task. That bounds deep-pull page bodies at roughly 180,000 characters
+per task; skipped-URL notes, command wrappers, and other tool results add
+overhead. The in-memory representation holds both each complete source and its
+chunk strings, so 180,000 is a unique-content budget, not a Python heap-byte
+limit.
 
 ## See also
 

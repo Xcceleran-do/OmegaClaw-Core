@@ -139,6 +139,48 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("SOURCE_BATCH_STORED ids=source-1", evidence.records()[-1].text)
         self.assertNotIn(body, evidence.records()[-1].text)
 
+    def test_reworded_warning_tail_still_chunks_source_payload(self):
+        payload = (
+            f"{evidence.UNTRUSTED_WEB_WARNING_PREFIX}. Updated policy wording.\n\n"
+            "Title: Stable marker\n"
+            "URL: https://example.com/stable\n\n"
+            "Source body."
+        )
+
+        evidence.append(payload, 50_000)
+
+        self.assertEqual(
+            [source.url for source in evidence.sources()],
+            ["https://example.com/stable"],
+        )
+        self.assertEqual(evidence.stats().source_marker_mismatches, 0)
+
+    def test_direct_source_payload_with_quoted_body_still_chunks(self):
+        payload = deep_pull_page(
+            "Quoted body",
+            "https://example.com/direct-quotes",
+            'The article calls this "important".',
+        )
+
+        evidence.append(payload, 50_000)
+
+        self.assertEqual(len(evidence.sources()), 1)
+        self.assertEqual(evidence.stats().source_marker_mismatches, 0)
+
+    def test_title_payload_without_warning_increments_mismatch_telemetry(self):
+        payload = (
+            "Changed producer marker.\n\n"
+            "Title: Lost marker\n"
+            "URL: https://example.com/lost-marker\n\n"
+            "Source body."
+        )
+
+        evidence.append(payload, 50_000)
+
+        self.assertEqual(evidence.sources(), ())
+        self.assertEqual(evidence.stats().source_marker_mismatches, 1)
+        self.assertEqual(evidence.records()[0].text, payload)
+
     def test_chunking_preserves_sibling_command_feedback_without_page_duplication(self):
         body = "Complete page body."
         result = deep_pull_page("Story", "https://example.com/story", body)
@@ -270,6 +312,7 @@ class EvidenceTests(unittest.TestCase):
         stats = evidence.stats()
         self.assertEqual(stats.task_generation, first_generation + 1)
         self.assertEqual(stats.appended_records, 1)
+        self.assertEqual(stats.source_marker_mismatches, 0)
         self.assertEqual(evidence.sources()[0].id, "source-1")
         self.assertEqual(evidence.records()[0].id, "source-1-chunk-1")
 
