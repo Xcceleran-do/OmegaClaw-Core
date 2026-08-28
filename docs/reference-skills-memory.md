@@ -127,17 +127,26 @@ Success / failure of the append.
 
 ### Purpose
 Prefer one or more exact task-evidence records for the next context compilation.
-The records move to the newest position without being copied.
+Recall assigns one-use priorities in the requested order without copying or
+reordering the retained records.
 
 ### Parameters
 - `ids` — one exact record ID or a comma/space-separated batch. A source ID expands to all of that source's chunks.
 
 ### Returns
-A compact `RECALL-SUCCESS preferred=[...]` status plus
-`RECALL-UNAVAILABLE ids=[...]` for honest misses. It never returns or duplicates
-the complete evidence as its own tool result.
+A compact status that distinguishes records queued for the next compilation,
+records deferred to another batch, records too large for the entire input
+budget, and unavailable IDs. A partial batch includes the next exact recall
+command, its minimum additional interaction count, and the current interaction
+horizon. It never returns or duplicates the complete evidence as its own tool
+result.
 
 ### Notes / Limits
 - Recall is exact and task-local; it is not embedding search.
+- `RECALL-QUEUED` means prioritized for the next compilation, not guaranteed
+  visible. The compiler may still omit a queued record after required context is
+  reserved; the next source card or omission receipt reports what actually fit.
+- `RECALL-TOO-LARGE` is definitive: the record cannot fit even if it were the
+  only evidence record in the configured input budget.
 - Source cards show which chunks are visible and hidden and provide the exact batched recall command.
 - Evidence is lost on task reset or process/container restart.

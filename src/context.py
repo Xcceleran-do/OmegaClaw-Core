@@ -42,6 +42,7 @@ class ContextRecord:
     required: bool = False
     message_role: ModelRole = "system"
     related_record_ids: tuple[str, ...] = ()
+    recall_rank: int = 0
 
     def render(self) -> str:
         if self.kind in _LEGACY_SECTION_KINDS:
@@ -164,7 +165,7 @@ class ContextCompiler:
 
         optional = sorted(
             ((index, record) for index, record in indexed if not record.required),
-            key=lambda item: (item[1].priority, item[0]),
+            key=lambda item: (item[1].priority, item[1].recall_rank, item[0]),
             reverse=True,
         )
         history_blocked = False
@@ -466,6 +467,7 @@ def loop_context_records(
             ),
             priority=80,
             message_role="user",
+            recall_rank=int(getattr(record, "recall_rank", 0) or 0),
         )
         for record in evidence_items
     )
