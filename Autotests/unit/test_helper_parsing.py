@@ -81,6 +81,7 @@ def test_starts_command_line_recognizes_known_commands(helper):
     assert helper.starts_command_line("(send hi)") is True
     assert helper.starts_command_line("  shell ls") is True
     assert helper.starts_command_line("write-file a b") is True
+    assert helper.starts_command_line("recall source-1-chunk-2") is True
 
 
 def test_starts_command_line_rejects_prose_and_blanks(helper):
@@ -124,6 +125,12 @@ def test_balance_escapes_embedded_quotes_in_content(helper):
 
 def test_balance_escapes_backslash_in_shell_command(helper):
     assert helper.balance_parentheses("shell echo a\\b") == '((shell "echo a\\\\b"))'
+
+
+def test_balance_keeps_batched_recall_as_one_argument(helper):
+    assert helper.balance_parentheses(
+        "recall source-1-chunk-2,source-3-chunk-1"
+    ) == '((recall "source-1-chunk-2,source-3-chunk-1"))'
 
 
 # --- normalize_string -----------------------------------------------------

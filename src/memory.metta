@@ -59,3 +59,6 @@
 
 (= (episodes $time)
    (py-call (helper.around_time $time (maxEpisodeRecallLines))))
+
+(= (recall $ids)
+   (py-call (evidence.recall $ids)))

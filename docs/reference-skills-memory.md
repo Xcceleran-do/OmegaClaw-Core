@@ -2,7 +2,7 @@
 
 Defined in `src/memory.metta` and catalogued in `src/skills.metta`.
 
-All four skills accept quoted string arguments. Variables are not permitted in LLM-generated calls.
+All five skills accept quoted string arguments. Variables are not permitted in LLM-generated calls.
 
 ---
 
@@ -115,3 +115,29 @@ Success / failure of the append.
 ### Notes / Limits
 - `pin` is not semantically indexed — it influences later turns while its complete history record fits the context compiler's token budget.
 - For anything you want to recall days later, use `remember` instead.
+
+---
+
+## `recall`
+
+### Signature
+```metta
+(recall "source-1-chunk-2,source-3-chunk-1")
+```
+
+### Purpose
+Prefer one or more exact task-evidence records for the next context compilation.
+The records move to the newest position without being copied.
+
+### Parameters
+- `ids` — one exact record ID or a comma/space-separated batch. A source ID expands to all of that source's chunks.
+
+### Returns
+A compact `RECALL-SUCCESS preferred=[...]` status plus
+`RECALL-UNAVAILABLE ids=[...]` for honest misses. It never returns or duplicates
+the complete evidence as its own tool result.
+
+### Notes / Limits
+- Recall is exact and task-local; it is not embedding search.
+- Source cards show which chunks are visible and hidden and provide the exact batched recall command.
+- Evidence is lost on task reset or process/container restart.

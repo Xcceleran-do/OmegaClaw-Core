@@ -29,14 +29,14 @@ Also initializes runtime state:
 1. **Decrement `&loops`** (turns > 1 only).
 2. **Receive** — `(receive)` via the active channel.
 3. **Detect new input** — compare against `&prevmsg`. If different and non-empty, reset the evidence module and restore `&loops` to `maxNewInputLoops`.
-4. **Compile model context** — after input detection, `ContextCompiler` ranks stable instructions, task evidence, and complete history records; reserves `maxOutputToken`; and emits included/omitted record IDs plus candidate, rendered, and omitted size measurements. Omitted tool results and degraded required records leave explicit placeholders. History is selected as a contiguous recent suffix. The compiler produces a typed request with trusted instructions in `system` and task/evidence/history data in `user`.
+4. **Compile model context** — after input detection, `ContextCompiler` ranks stable instructions, task evidence, and complete history records; reserves `maxOutputToken`; and emits included/omitted record IDs plus candidate, rendered, and omitted size measurements. Omitted generic tool results leave exact-recall receipts. URL-scoped chunks share one deterministic source card, which lists visible and hidden chunk IDs instead of emitting one receipt per hidden chunk. History is selected as a contiguous recent suffix. The compiler produces a typed request with trusted instructions in `system` and task/evidence/history data in `user`.
 5. **Set next wake** — `&nextWakeAt := now + wakeupInterval`.
 6. **Call the LLM** — emit the single-line `CHARS_SENT` trace, then dispatch the typed `ModelRequest` through the selected provider adapter and retain typed usage, finish-reason, reasoning, and tool-call metadata in `ModelResponse`. Context compilation is caught at the loop boundary so an impossible budget cannot terminate the process.
 7. **Repair parentheses** — `helper.balance_parentheses` fixes common mismatches before parsing.
 8. **Parse** — `sread` on the repaired string; if it does not start with `(`, the loop feeds back a reminder prompt.
 9. **Dispatch skills** — `(superpose $sexpr)` runs each skill, capturing errors via `HandleError`.
 10. **Record** — `addToHistory` appends human message + response + any errors to `memory/history.metta`, provided something new happened.
-11. **Append evidence** — when the turn parsed actionable input, retain its results in execution order. If `maxFeedback` is exceeded, evict whole oldest records; an individually oversized result is explicitly marked and capped at half the budget so later evidence can coexist.
+11. **Append evidence** — when the turn parsed actionable input, retain its results in execution order until task reset. Recognized bulk web results are separated by URL and split at paragraph, heading, or sentence boundaries into approximately 800–1,200-token chunks. Complete cleaned source text remains in task memory; no authoritative record is character-truncated.
 12. **Sleep** — `(sleep (sleepInterval))`.
 13. **Recurse** — `(omegaclaw (+ 1 $k))`.
 
@@ -59,7 +59,10 @@ Each provider interaction emits a single-line `TASK_TELEMETRY` JSON object.
 `task_generation` changes whenever evidence is reset, while `interaction`
 counts model calls within that generation. The payload contains:
 
-- current, appended, evicted, and truncated evidence characters and records;
+- current and appended evidence characters and records, including source/chunk counts;
+- source-marker mismatches (a `Title:`/`URL:` payload without the expected
+  stable `Untrusted web content follows` prefix);
+- recall calls, requested IDs, exact hits, and misses;
 - candidate, included, omitted, and rendered context sizes in characters and
   estimated tokens;
 - the resolved context window, output reserve, input budget, and utilization.
@@ -68,6 +71,14 @@ counts model calls within that generation. The payload contains:
 available input budget. `CHANNEL_SEND` records whether the selected channel
 adapter accepted or raised while dispatching a message; it does not claim
 downstream delivery by asynchronous channel infrastructure.
+
+For the current Mindplex gateway, `deep_pull` exposes at most 12,000
+characters per returned page, up to five pages per call, and defaults to three
+calls per task. That bounds deep-pull page bodies at roughly 180,000 characters
+per task; skipped-URL notes, command wrappers, and other tool results add
+overhead. The in-memory representation holds both each complete source and its
+chunk strings, so 180,000 is a unique-content budget, not a Python heap-byte
+limit.
 
 ## See also
 

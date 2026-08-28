@@ -10,6 +10,7 @@ from context import (
     ContextRecord,
     estimate_tokens,
     history_records,
+    loop_context_records,
     validate_context_budget,
 )
 
@@ -147,7 +148,7 @@ class ContextCompilerTests(unittest.TestCase):
             ),
             task_message="write",
             turn_message="write",
-            context_window_tokens=80,
+            context_window_tokens=95,
             max_output_tokens=20,
         )
 
@@ -155,13 +156,131 @@ class ContextCompilerTests(unittest.TestCase):
 
         self.assertIn("tool-result-1", compiled.manifest.omitted_record_ids)
         self.assertIn(
-            "[TOOL_RESULT_OMITTED id=tool-result-1 original_chars=200]",
+            "[TOOL_RESULT_OMITTED id=tool-result-1 original_chars=200 "
+            "recall='recall \"tool-result-1\"']",
             compiled.request.messages[1].content,
         )
         manifest = compiled.manifest.as_dict()
         self.assertEqual(manifest["tool_results"]["candidate"]["chars"], 200)
         self.assertEqual(manifest["tool_results"]["omitted"]["chars"], 200)
         self.assertLess(manifest["tool_results"]["rendered"]["chars"], 200)
+
+    def test_source_card_is_the_only_receipt_for_hidden_chunks(self):
+        source = evidence.SourceDocument(
+            id="source-1",
+            url="https://example.com/story",
+            title="Story",
+            text="complete source text",
+            published_at=None,
+            chunk_ids=tuple(f"source-1-chunk-{index}" for index in range(1, 8)),
+        )
+        chunks = tuple(
+            evidence.EvidenceRecord(
+                id=chunk_id,
+                text=(f"chunk {index} evidence " * 120),
+                kind="source_chunk",
+                source_id=source.id,
+                url=source.url,
+                title=source.title,
+                chunk_index=index,
+                chunk_count=7,
+            )
+            for index, chunk_id in enumerate(source.chunk_ids, start=1)
+        )
+        adapted = loop_context_records(
+            prompt="",
+            skills="",
+            prompt_extensions="",
+            output_format="",
+            memory_directory="",
+            current_time="",
+            evidence_records=chunks,
+            history="",
+            evidence_sources=(source,),
+        )
+        source_records = tuple(
+            item for item in adapted if item.kind in {"SOURCE_CARD", "SOURCE_CHUNK"}
+        )
+
+        compiled = ContextCompiler(count_tokens=words).compile(
+            ContextInput(
+                records=source_records,
+                task_message="write",
+                turn_message="write",
+                context_window_tokens=350,
+                max_output_tokens=20,
+            )
+        )
+
+        user = compiled.request.messages[1].content
+        self.assertIn("[SOURCE_CARD id=source-1]", user)
+        self.assertIn("Visible chunks: (none)", user)
+        self.assertIn("Hidden chunks: source-1-chunk-1", user)
+        self.assertIn('Recall hidden: recall "source-1-chunk-1,', user)
+        self.assertNotIn("SOURCE_CHUNK_OMITTED", user)
+        self.assertEqual(compiled.manifest.candidate_tool_results.count, 7)
+        self.assertEqual(compiled.manifest.omitted_tool_results.count, 7)
+
+    def test_five_source_batch_can_recall_three_chunks_without_losing_sources(self):
+        sections = []
+        bodies = []
+        for index in range(1, 6):
+            body = (f"source {index} evidence sentence. " * 450).rstrip()
+            bodies.append(body)
+            sections.append(
+                f"[{index}/5] Title: Story {index}\n"
+                f"URL: https://example.com/{index}\n\n"
+                f"{body}"
+            )
+        evidence.append(
+            evidence.UNTRUSTED_WEB_WARNING + "\n\n" + "\n\n".join(sections),
+            50_000,
+        )
+
+        def compile_current():
+            return ContextCompiler().compile(
+                ContextInput(
+                    records=loop_context_records(
+                        prompt="writer rules",
+                        skills="recall comma_separated_ids",
+                        prompt_extensions="",
+                        output_format="send final text",
+                        memory_directory="/tmp",
+                        current_time="now",
+                        evidence_records=evidence.records(),
+                        history="",
+                        evidence_sources=evidence.sources(),
+                    ),
+                    task_message="write one article",
+                    turn_message="continue",
+                    context_window_tokens=32768,
+                    max_output_tokens=16000,
+                )
+            )
+
+        first = compile_current()
+        self.assertLessEqual(
+            first.manifest.estimated_input_tokens,
+            first.manifest.input_token_budget,
+        )
+        self.assertGreater(first.manifest.omitted_tool_results.count, 0)
+        first_user = first.request.messages[1].content
+        self.assertEqual(first_user.count("[SOURCE_CARD id="), 5)
+        self.assertTrue(all(body not in first_user for body in bodies))
+
+        sources = evidence.sources()
+        recalled = tuple(sources[index].chunk_ids[0] for index in (0, 2, 4))
+        evidence.recall(",".join(recalled))
+        evidence.append("verification search result", 50_000)
+        second = compile_current()
+
+        self.assertTrue(set(recalled).issubset(second.manifest.included_record_ids))
+        self.assertEqual(len(evidence.sources()), 5)
+        self.assertNotIn("SOURCE_CHUNK_OMITTED", second.request.messages[1].content)
+
+        evidence.reset()
+        self.assertEqual(evidence.records(), ())
+        self.assertEqual(evidence.sources(), ())
 
     def test_context_budget_validation_rejects_impossible_allocations(self):
         self.assertEqual(validate_context_budget(100, 40), 60)

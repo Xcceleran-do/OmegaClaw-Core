@@ -28,7 +28,7 @@ This reads a command-line override via `argk` (`name=value` on the MeTTa command
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `maxFeedback` | 50000 (chars) | Character budget for task evidence in `LAST_SKILL_USE_RESULTS`; oldest records are evicted whole, while an individually oversized record is explicitly truncated to half the budget. |
+| `maxFeedback` | 50000 (chars) | Compatibility character budget for the legacy evidence rendering view. Authoritative task evidence remains in memory until reset; the token-budgeted context compiler controls prompt visibility. |
 | `maxRecallItems` | 20 | Items returned by `query`. |
 | `maxEpisodeRecallLines` | 20 | Lines returned by `episodes`. |
 | `maxHistory` | 30000 (chars) | Bounded history candidate tail. The compiler discards a leading partial record, then selects only complete records under `contextWindowTokens`. |

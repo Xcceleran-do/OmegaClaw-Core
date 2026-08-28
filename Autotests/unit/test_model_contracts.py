@@ -148,6 +148,7 @@ class ModelContractTests(unittest.TestCase):
         telemetry = json.loads(providers.llmProviderLastTaskTelemetry())
         self.assertEqual(telemetry["interaction"], 1)
         self.assertEqual(telemetry["evidence"]["retained_records"], 2)
+        self.assertEqual(telemetry["evidence"]["source_marker_mismatches"], 0)
         self.assertEqual(telemetry["context"]["tool_results"]["candidate"]["count"], 2)
 
     def test_task_interaction_counter_resets_with_evidence(self):
