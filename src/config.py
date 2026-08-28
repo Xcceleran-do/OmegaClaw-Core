@@ -44,8 +44,23 @@ def config_get_by_key(key, default=None):
         return _cache_config(key, _CONFIG_FILE.get(key), "config file")
     return _cache_config(key, default, "defaults")
 
+def _coerce(value):
+    """Restore numeric types lost by command-line and environment parsing."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        return value
+
 def _cache_config(key, value, source):
     global _CONFIG
+    value = _coerce(value)
     _CONFIG[key] = value
     logger.info(f"Configuration item resolved using {source}: {key}={value}")
     return value
