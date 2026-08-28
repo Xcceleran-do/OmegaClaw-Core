@@ -1,7 +1,8 @@
 """Task-scoped tool evidence retained across agent turns."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
+from typing import Callable
 
 from context import estimate_tokens
 
@@ -40,6 +41,7 @@ class EvidenceRecord:
     chunk_count: int | None = None
     token_count: int | None = None
     continued: bool = False
+    recall_rank: int = 0
 
 
 @dataclass(frozen=True)
@@ -114,6 +116,8 @@ _recall_calls = 0
 _recall_requested = 0
 _recall_hits = 0
 _recall_misses = 0
+_pending_recall_ranks: dict[str, int] = {}
+_next_recall_rank = 0
 
 
 def reset():
@@ -122,6 +126,7 @@ def reset():
     global _appended_records, _appended_chars
     global _source_marker_mismatches
     global _recall_calls, _recall_requested, _recall_hits, _recall_misses
+    global _next_recall_rank
     _records.clear()
     _sources.clear()
     _next_id = 1
@@ -135,6 +140,8 @@ def reset():
     _recall_requested = 0
     _recall_hits = 0
     _recall_misses = 0
+    _pending_recall_ranks.clear()
+    _next_recall_rank = 0
 
 
 def append(record, max_chars):
@@ -163,8 +170,14 @@ def append(record, max_chars):
     return render(limit)
 
 
-def recall(record_ids) -> str:
-    """Prefer exact retained records for the next compilation without copying."""
+def recall(
+    record_ids,
+    *,
+    input_token_budget: int | None = None,
+    count_tokens: Callable[[str], int] | None = None,
+    interactions_remaining: int | None = None,
+) -> str:
+    """Prioritize an ordered, feasible batch for the next compilation."""
     global _recall_calls, _recall_requested, _recall_hits, _recall_misses
     requested = _parse_record_ids(record_ids)
     _recall_calls += 1
@@ -174,31 +187,52 @@ def recall(record_ids) -> str:
     sources_by_id = {source.id: source for source in _sources}
     found_requests: list[str] = []
     unavailable: list[str] = []
-    preferred_ids: list[str] = []
+    candidate_ids: list[str] = []
 
     for record_id in requested:
         if record_id in records_by_id:
             found_requests.append(record_id)
-            preferred_ids.append(record_id)
+            candidate_ids.append(record_id)
         elif record_id in sources_by_id:
             found_requests.append(record_id)
-            preferred_ids.extend(sources_by_id[record_id].chunk_ids)
+            candidate_ids.extend(sources_by_id[record_id].chunk_ids)
         else:
             unavailable.append(record_id)
 
-    preferred_ids = list(dict.fromkeys(preferred_ids))
-    preferred = [records_by_id[record_id] for record_id in preferred_ids]
-    preferred_set = set(preferred_ids)
-    _records[:] = [record for record in _records if record.id not in preferred_set]
-    _records.extend(preferred)
+    candidate_ids = list(dict.fromkeys(candidate_ids))
+    counter = count_tokens or estimate_tokens
+    budget = (
+        max(0, int(input_token_budget))
+        if input_token_budget is not None
+        else None
+    )
+    token_counts = {
+        record_id: max(0, int(counter(records_by_id[record_id].text)))
+        for record_id in candidate_ids
+    }
+    too_large = [
+        record_id
+        for record_id in candidate_ids
+        if budget is not None and token_counts[record_id] > budget
+    ]
+    feasible = [record_id for record_id in candidate_ids if record_id not in too_large]
+    queued, deferred = _ordered_recall_batch(feasible, token_counts, budget)
+    for record_id in candidate_ids:
+        _pending_recall_ranks.pop(record_id, None)
+    _rank_for_next_compilation(queued)
     _recall_hits += len(found_requests)
     _recall_misses += len(unavailable)
-    parts = []
-    if preferred_ids:
-        parts.append(f"RECALL-SUCCESS preferred=[{','.join(preferred_ids)}]")
-    if unavailable or not requested:
-        parts.append(f"RECALL-UNAVAILABLE ids=[{','.join(unavailable)}]")
-    return " ".join(parts)
+    return _recall_response(
+        queued=queued,
+        deferred=deferred,
+        too_large=too_large,
+        unavailable=unavailable,
+        records_by_id=records_by_id,
+        token_counts=token_counts,
+        input_token_budget=budget,
+        interactions_remaining=interactions_remaining,
+        requested=bool(requested),
+    )
 
 
 def render(max_chars=None):
@@ -220,7 +254,17 @@ def render(max_chars=None):
 
 def records():
     """Return an immutable snapshot for context selection."""
-    return tuple(_records)
+    return tuple(
+        replace(record, recall_rank=_pending_recall_ranks.get(record.id, 0))
+        for record in _records
+    )
+
+
+def clear_recall_preferences() -> None:
+    """Consume recall priorities after one successful model completion."""
+    global _next_recall_rank
+    _pending_recall_ranks.clear()
+    _next_recall_rank = 0
 
 
 def sources():
@@ -326,6 +370,110 @@ def _parse_record_ids(value) -> list[str]:
             if part.strip("\"'[]()")
         )
     )
+
+
+def _ordered_recall_batch(
+    record_ids: list[str],
+    token_counts: dict[str, int],
+    budget: int | None,
+) -> tuple[list[str], list[str]]:
+    if budget is None:
+        return list(record_ids), []
+
+    used = 0
+    split_at = len(record_ids)
+    for index, record_id in enumerate(record_ids):
+        candidate = used + token_counts[record_id]
+        if candidate > budget:
+            split_at = index
+            break
+        used = candidate
+    return list(record_ids[:split_at]), list(record_ids[split_at:])
+
+
+def _rank_for_next_compilation(record_ids: list[str]) -> None:
+    global _next_recall_rank
+    if not record_ids:
+        return
+    _next_recall_rank += len(record_ids)
+    highest = _next_recall_rank
+    for offset, record_id in enumerate(record_ids):
+        _pending_recall_ranks[record_id] = highest - offset
+
+
+def _recall_response(
+    *,
+    queued: list[str],
+    deferred: list[str],
+    too_large: list[str],
+    unavailable: list[str],
+    records_by_id: dict[str, EvidenceRecord],
+    token_counts: dict[str, int],
+    input_token_budget: int | None,
+    interactions_remaining: int | None,
+    requested: bool,
+) -> str:
+    if queued and (deferred or too_large or unavailable):
+        status = "RECALL-PARTIAL"
+    elif queued:
+        status = "RECALL-QUEUED"
+    elif too_large:
+        status = "RECALL-TOO-LARGE"
+    elif deferred:
+        status = "RECALL-DEFERRED"
+    else:
+        status = "RECALL-UNAVAILABLE"
+
+    parts = [status]
+    if queued:
+        parts.append(f"queued=[{','.join(queued)}]")
+        parts.append("queued_for=next_compile")
+    if deferred:
+        parts.append(f"deferred=[{','.join(deferred)}]")
+    if too_large:
+        details = ",".join(
+            f"{record_id}(chars={len(records_by_id[record_id].text)},"
+            f"estimated_tokens={token_counts[record_id]})"
+            for record_id in too_large
+        )
+        parts.append(f"too_large=[{details}]")
+    if unavailable or not requested:
+        parts.append(f"unavailable=[{','.join(unavailable)}]")
+    if input_token_budget is not None:
+        parts.append(f"input_budget_tokens={input_token_budget}")
+    if deferred:
+        next_batch, _ = _ordered_recall_batch(
+            deferred, token_counts, input_token_budget
+        )
+        parts.append(f"next='recall \"{','.join(next_batch)}\"'")
+        parts.append(f"deferred_count={len(deferred)}")
+        parts.append(
+            "minimum_additional_interactions="
+            f"{_recall_batch_count(deferred, token_counts, input_token_budget)}"
+        )
+    if interactions_remaining is not None:
+        parts.append(f"interactions_remaining={max(0, int(interactions_remaining))}")
+    return " ".join(parts)
+
+
+def _recall_batch_count(
+    record_ids: list[str],
+    token_counts: dict[str, int],
+    budget: int | None,
+) -> int:
+    if not record_ids:
+        return 0
+    if budget is None:
+        return 1
+    batches = 1
+    used = 0
+    for record_id in record_ids:
+        size = token_counts[record_id]
+        if used and used + size > budget:
+            batches += 1
+            used = 0
+        used += size
+    return batches
 
 
 def _source_documents(

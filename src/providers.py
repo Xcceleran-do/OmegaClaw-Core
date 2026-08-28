@@ -64,12 +64,14 @@ _last_manifest: dict[str, object] | None = None
 _last_task_telemetry: dict[str, object] | None = None
 _task_generation: int | None = None
 _task_interaction = 0
+_max_new_input_loops: int | None = None
 
 
 def llmProviderValidateContextBudget(
     context_window_tokens, max_output_tokens, max_new_input_loops=None
 ):
     """Validate and log the model's configured input/output allocation."""
+    global _max_new_input_loops
     window = int(context_window_tokens)
     output = int(max_output_tokens)
     budget = validate_context_budget(window, output)
@@ -78,8 +80,11 @@ def llmProviderValidateContextBudget(
         "max_output_tokens": output,
         "input_token_budget": budget,
     }
-    if max_new_input_loops is not None:
-        allocation["max_new_input_loops"] = int(max_new_input_loops)
+    _max_new_input_loops = (
+        int(max_new_input_loops) if max_new_input_loops is not None else None
+    )
+    if _max_new_input_loops is not None:
+        allocation["max_new_input_loops"] = _max_new_input_loops
     logger.info("[CONTEXT_BUDGET] %s", json.dumps(allocation, separators=(",", ":")))
     if budget < output:
         logger.warning(
@@ -216,7 +221,37 @@ def llmProviderContextChat(
         )
     debug = compiled.request.to_legacy_prompt()
     logger.info("CHARS_SENT: %s %s", len(debug), json.dumps(debug, ensure_ascii=False))
-    return llmProviderComplete(compiled.request).text
+    response = llmProviderComplete(compiled.request).text
+    evidence.clear_recall_preferences()
+    return response
+
+
+def llmProviderRecall(record_ids):
+    """Queue exact evidence using the active model budget and loop horizon."""
+    evidence_stats = evidence.stats()
+    telemetry_is_current = bool(
+        _last_task_telemetry
+        and _last_task_telemetry.get("task_generation")
+        == evidence_stats.task_generation
+    )
+    manifest = _last_manifest if telemetry_is_current else None
+    input_budget = (
+        int(manifest["input_token_budget"])
+        if manifest and "input_token_budget" in manifest
+        else None
+    )
+    interactions_remaining = (
+        max(0, _max_new_input_loops - _task_interaction)
+        if _max_new_input_loops is not None and telemetry_is_current
+        else None
+    )
+    counter = _llmprovider.count_tokens if _llmprovider is not None else estimate_tokens
+    return evidence.recall(
+        record_ids,
+        input_token_budget=input_budget,
+        count_tokens=counter,
+        interactions_remaining=interactions_remaining,
+    )
 
 def llmProviderLastRequestChars():
     """Compatibility metric for existing loop logs and tests."""

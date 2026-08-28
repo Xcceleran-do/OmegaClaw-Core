@@ -72,7 +72,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(evidence.render(), "next-result")
         self.assertEqual(len(evidence.records()), 2)
 
-    def test_batch_recall_moves_exact_records_without_copying(self):
+    def test_batch_recall_ranks_exact_records_without_reordering_storage(self):
         for value in ("first", "second", "third"):
             evidence.append(value, 8)
 
@@ -80,16 +80,51 @@ class EvidenceTests(unittest.TestCase):
 
         self.assertEqual(
             [record.id for record in evidence.records()],
-            ["tool-result-2", "tool-result-1", "tool-result-3"],
+            ["tool-result-1", "tool-result-2", "tool-result-3"],
         )
+        ranks = {record.id: record.recall_rank for record in evidence.records()}
+        self.assertGreater(ranks["tool-result-1"], ranks["tool-result-3"])
+        self.assertEqual(ranks["tool-result-2"], 0)
         self.assertEqual(len(evidence.records()), 3)
-        self.assertIn("preferred=[tool-result-1,tool-result-3]", result)
-        self.assertIn("RECALL-UNAVAILABLE ids=[missing]", result)
+        self.assertIn("RECALL-PARTIAL queued=[tool-result-1,tool-result-3]", result)
+        self.assertIn("unavailable=[missing]", result)
         stats = evidence.stats()
         self.assertEqual(stats.recall_calls, 1)
         self.assertEqual(stats.recall_requested, 3)
         self.assertEqual(stats.recall_hits, 2)
         self.assertEqual(stats.recall_misses, 1)
+
+    def test_recall_rejects_an_individually_oversized_record(self):
+        evidence.append("x" * 300, 1_000)
+
+        result = evidence.recall(
+            "tool-result-1",
+            input_token_budget=50,
+            count_tokens=lambda text: len(text),
+        )
+
+        self.assertIn("RECALL-TOO-LARGE", result)
+        self.assertIn("tool-result-1(chars=300,estimated_tokens=300)", result)
+        self.assertIn("input_budget_tokens=50", result)
+
+    def test_recall_defers_the_ordered_suffix_to_another_batch(self):
+        for value in ("a" * 30, "b" * 30, "c" * 30):
+            evidence.append(value, 1_000)
+
+        result = evidence.recall(
+            "tool-result-1,tool-result-2,tool-result-3",
+            input_token_budget=65,
+            count_tokens=lambda text: len(text),
+            interactions_remaining=4,
+        )
+
+        self.assertIn("queued=[tool-result-1,tool-result-2]", result)
+        self.assertIn("queued_for=next_compile", result)
+        self.assertIn("deferred=[tool-result-3]", result)
+        self.assertIn("next='recall \"tool-result-3\"'", result)
+        self.assertIn("deferred_count=1", result)
+        self.assertIn("minimum_additional_interactions=1", result)
+        self.assertIn("interactions_remaining=4", result)
 
     def test_bulk_result_becomes_separate_url_scoped_sources(self):
         sections = []
@@ -127,12 +162,13 @@ class EvidenceTests(unittest.TestCase):
         recalled = [sources[index].chunk_ids[0] for index in (0, 2, 4)]
         record_count = len(evidence.records())
         result = evidence.recall(",".join(recalled))
+        ranks = {record.id: record.recall_rank for record in evidence.records()}
         self.assertEqual(
-            [record.id for record in evidence.records()[-3:]],
+            sorted(recalled, key=ranks.get, reverse=True),
             recalled,
         )
         self.assertEqual(len(evidence.records()), record_count)
-        self.assertIn(f"preferred=[{','.join(recalled)}]", result)
+        self.assertIn(f"queued=[{','.join(recalled)}]", result)
 
     def test_serialized_legitimate_batch_anchors_after_warning_not_outer_wrapper(self):
         result = "\n\n".join(
@@ -371,8 +407,9 @@ class EvidenceTests(unittest.TestCase):
 
         result = evidence.recall(source.id)
 
+        ranks = {record.id: record.recall_rank for record in evidence.records()}
         self.assertEqual(
-            tuple(record.id for record in evidence.records()[-len(source.chunk_ids) :]),
+            tuple(sorted(source.chunk_ids, key=ranks.get, reverse=True)),
             source.chunk_ids,
         )
         self.assertIn(",".join(source.chunk_ids), result)

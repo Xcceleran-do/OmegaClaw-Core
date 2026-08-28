@@ -174,6 +174,46 @@ class ModelContractTests(unittest.TestCase):
         self.assertEqual(after_reset["interaction"], 1)
         self.assertNotEqual(first["task_generation"], after_reset["task_generation"])
 
+    def test_recall_uses_the_current_budget_and_loop_horizon(self):
+        class CountingProvider(providers.LLMProvider):
+            def complete(self, _request):
+                return ModelResponse(text="continue")
+
+        provider = CountingProvider()
+        evidence.append("x" * 1_500, 2_000)
+        with patch.object(providers, "_llmprovider", provider):
+            providers.llmProviderValidateContextBudget(500, 100, 8)
+            providers.llmProviderContextChat(
+                "r", "s", "", "o", "m", "task", "task",
+                "now", "", 500, 100, "medium",
+            )
+            result = providers.llmProviderRecall("tool-result-1")
+
+        self.assertIn("RECALL-TOO-LARGE", result)
+        self.assertIn("input_budget_tokens=400", result)
+        self.assertIn("interactions_remaining=7", result)
+        self.assertEqual(evidence.records()[0].recall_rank, 0)
+
+    def test_successful_completion_consumes_recall_priority(self):
+        class CountingProvider(providers.LLMProvider):
+            def count_tokens(self, text):
+                return len(text.split())
+
+            def complete(self, _request):
+                return ModelResponse(text="done")
+
+        evidence.append("small evidence", 1_000)
+        evidence.recall("tool-result-1")
+        self.assertGreater(evidence.records()[0].recall_rank, 0)
+
+        with patch.object(providers, "_llmprovider", CountingProvider()):
+            providers.llmProviderContextChat(
+                "rules", "skills", "", "output", "/tmp", "task", "task",
+                "now", "", 200, 50, "medium",
+            )
+
+        self.assertEqual(evidence.records()[0].recall_rank, 0)
+
     def test_startup_budget_validation_logs_resolved_allocation(self):
         with patch.object(providers.logger, "info") as info:
             budget = providers.llmProviderValidateContextBudget(32768, 6000, 50)

@@ -78,6 +78,25 @@ class ContextCompilerTests(unittest.TestCase):
         self.assertIn("evidence", compiled.manifest.included_record_ids)
         self.assertIn("history", compiled.manifest.omitted_record_ids)
 
+    def test_recall_rank_prefers_the_first_requested_record(self):
+        compiler = ContextCompiler(count_tokens=words)
+        context = ContextInput(
+            records=(
+                ContextRecord("first", "TOOL_RESULT", "first " * 20, 80, False, "user", (), 3),
+                ContextRecord("second", "TOOL_RESULT", "second " * 20, 80, False, "user", (), 2),
+                ContextRecord("third", "TOOL_RESULT", "third " * 20, 80, False, "user", (), 1),
+            ),
+            task_message="write",
+            turn_message="write",
+            context_window_tokens=70,
+            max_output_tokens=8,
+        )
+
+        compiled = compiler.compile(context)
+
+        self.assertIn("first", compiled.manifest.included_record_ids)
+        self.assertIn("third", compiled.manifest.omitted_record_ids)
+
     def test_oversized_required_record_degrades_to_an_explicit_placeholder(self):
         compiler = ContextCompiler(count_tokens=words)
         context = ContextInput(
