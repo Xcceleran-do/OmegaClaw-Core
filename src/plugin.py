@@ -93,6 +93,9 @@ def loadPythonPlugin(name, location):
         logger.info(f"_initPythonPlugin: loading {name} plugin from {modpath} using Python module loader")
         spec = importlib.util.spec_from_file_location(name, modpath)
         mod = importlib.util.module_from_spec(spec)
+        # Register before exec so py-call (which imports by name from sys.path)
+        # resolves to this instance instead of loading a second, separate copy.
+        sys.modules[name] = mod
         spec.loader.exec_module(mod)
 
     if mod is not None:
